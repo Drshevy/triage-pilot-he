@@ -1,0 +1,395 @@
+{
+  "version": "0.3.0-pilot",
+  "status": "PLACEHOLDER — NOT CLINICALLY VALIDATED. Requires review and sign-off by a licensed physician / clinical safety officer before any real-world use.",
+  "lastUpdated": "2026-11-20",
+  "signOff": { "signedBy": null, "date": null, "note": "Pending clinical sign-off" },
+  "sources": {
+    "MTS": "Manchester Triage System — discriminator concepts (placeholder paraphrase; verify against licensed current edition)",
+    "ESI": "Emergency Severity Index v4-style acuity concepts (placeholder paraphrase; verify)",
+    "FAST": "FAST / BE-FAST stroke recognition concept (public-health awareness tool)",
+    "ACR": "ACR Appropriateness Criteria® — imaging appropriateness concepts (placeholder notes; verify current topic & variant)",
+    "ESC": "ESC guideline concepts (e.g. ACS / PE) — placeholder paraphrase; verify current version",
+    "NICE": "NICE guideline concepts (e.g. NG51 sepsis, CG160 fever <5y 'traffic light', NG143) — placeholder paraphrase; verify",
+    "WHO": "WHO / general public-health guidance concepts — placeholder",
+    "MOH-IL": "Israel Ministry of Health public guidance concepts — placeholder; verify",
+    "ACOG": "ACOG pregnancy warning-sign concepts — placeholder; verify",
+    "C-SSRS": "Columbia Suicide Severity Rating Scale screening concept — placeholder; verify",
+    "WAO": "World Allergy Organization anaphylaxis criteria concept — placeholder; verify",
+    "OTTAWA": "Ottawa ankle/knee rules concept — placeholder; verify",
+    "WELLS": "Wells score (DVT/PE) concept — placeholder; verify",
+    "HEART": "HEART score concept for chest pain — placeholder; verify",
+    "LOCAL": "Pilot local placeholder rule — authored for prototype only"
+  },
+  "urgencyLevels": [
+    { "id": "emergency", "rank": 1, "label": "חירום — 101 / מיון מיידי", "en": "Emergency" },
+    { "id": "same-day", "rank": 2, "label": "באותו יום", "en": "Same day" },
+    { "id": "within-days", "rank": 3, "label": "תוך מספר ימים", "en": "Within days" },
+    { "id": "routine", "rank": 4, "label": "שגרתי", "en": "Routine" }
+  ],
+  "redFlags": [
+    { "id": "RF-CHEST-ACS", "label": "כאב בחזה עם הקרנה / הזעה / קוצר נשימה", "en": "Chest pain with radiation, sweating or dyspnea", "action": "101", "source": "MTS", "when": { "all": [ { "f": "category", "eq": "chest" }, { "any": [ { "f": "chest_radiation", "eq": true }, { "f": "chest_sweat", "eq": true }, { "f": "chest_sob", "eq": true } ] } ] }, "text": ["מקרין ליד", "מקרין ללסת", "radiating to arm", "crushing chest"] },
+    { "id": "RF-SOB-SEVERE", "label": "קוצר נשימה חמור (במנוחה / לא מסוגל לדבר / כחלון)", "en": "Severe shortness of breath", "action": "101", "source": "MTS", "when": { "any": [ { "f": "breath_speech", "eq": true }, { "f": "breath_cyanosis", "eq": true } ] }, "text": ["לא מצליח לנשום", "לא מצליחה לנשום", "אין לי אוויר", "can't breathe", "cannot breathe"] },
+    { "id": "RF-STROKE-FAST", "label": "סימני שבץ (FAST): צניחת פנים / חולשת יד / הפרעת דיבור", "en": "Stroke signs (FAST)", "action": "101", "source": "FAST", "when": { "any": [ { "f": "neuro_fast", "hasAny": ["face", "arm", "speech"] } ] }, "text": ["הפה עקום", "פה עקום", "צד אחד חלש", "לא מצליח לדבר", "face drooping", "slurred speech"] },
+    { "id": "RF-LOC", "label": "אובדן הכרה / פרכוס", "en": "Loss of consciousness / seizure", "action": "101", "source": "MTS", "when": { "any": [ { "f": "rf_general", "hasAny": ["loc", "seizure"] } ] }, "text": ["איבדתי הכרה", "איבד הכרה", "איבדה הכרה", "התעלפתי", "פרכוס", "passed out", "unconscious", "seizure"] },
+    { "id": "RF-BLEED", "label": "דימום חמור שאינו נעצר", "en": "Severe uncontrolled bleeding", "action": "101", "source": "MTS", "when": { "any": [ { "f": "rf_general", "hasAny": ["bleeding"] }, { "f": "injury_bleeding", "eq": true } ] }, "text": ["דימום חזק", "לא מפסיק לדמם", "severe bleeding"] },
+    { "id": "RF-SUICIDE", "label": "מחשבות אובדניות / כוונה לפגוע בעצמי", "en": "Suicidal ideation / self-harm intent", "action": "1201", "source": "C-SSRS", "when": { "any": [ { "f": "psych_selfharm", "eq": true } ] }, "text": ["רוצה למות", "להתאבד", "לשים קץ", "לפגוע בעצמי", "kill myself", "suicide", "end my life"] },
+    { "id": "RF-ANAPHYLAXIS", "label": "סימני אנפילקסיס: נפיחות גרון/לשון, קושי בנשימה לאחר חשיפה", "en": "Anaphylaxis signs", "action": "101", "source": "WAO", "when": { "any": [ { "f": "rf_general", "hasAny": ["throat"] }, { "f": "skin_throat", "eq": true } ] }, "text": ["הגרון נסגר", "נפיחות בלשון", "throat closing", "tongue swelling"] },
+    { "id": "RF-THUNDERCLAP", "label": "כאב ראש פתאומי וקיצוני ('הכי חזק בחיים')", "en": "Thunderclap headache", "action": "101", "source": "MTS", "when": { "any": [ { "f": "neuro_sudden", "eq": true } ] }, "text": ["כאב הראש הכי חזק", "worst headache"] },
+    { "id": "RF-MENINGISM", "label": "חום עם צוואר נוקשה או פריחה שאינה מחווירה", "en": "Fever with neck stiffness or non-blanching rash", "action": "101", "source": "NICE", "when": { "any": [ { "f": "fever_neck", "eq": true }, { "f": "fever_rash_nonblanch", "eq": true } ] } },
+    { "id": "RF-GI-BLEED", "label": "הקאה דמית / צואה שחורה", "en": "Hematemesis / melena", "action": "101", "source": "MTS", "when": { "any": [ { "f": "abd_blood", "eq": true } ] }, "text": ["מקיא דם", "הקאתי דם", "vomiting blood"] },
+    { "id": "RF-LIMB-ISCHEMIA", "label": "גפה קרה, חיוורת וכואבת", "en": "Cold, pale, painful limb", "action": "101", "source": "MTS", "when": { "any": [ { "f": "swell_cold", "eq": true } ] } },
+    { "id": "RF-VISION-LOSS", "label": "אובדן ראייה פתאומי", "en": "Sudden vision loss", "action": "101", "source": "MTS", "when": { "any": [ { "f": "eye_loss", "eq": true } ] } },
+    { "id": "RF-TESTIS", "label": "כאב אשך פתאומי וחזק (חשד לתסביב)", "en": "Sudden severe testicular pain", "action": "101", "source": "MTS", "when": { "any": [ { "f": "uro_testis", "eq": true } ] } },
+    { "id": "RF-PREG", "label": "הריון עם דימום משמעותי / כאב בטן חזק / כאב ראש וטשטוש ראייה", "en": "Pregnancy warning signs", "action": "101", "source": "ACOG", "when": { "all": [ { "f": "pregnant", "eq": true }, { "any": [ { "f": "preg_warning", "hasAny": ["bleeding", "pain", "headache_vision", "fluid", "no_movement"] } ] } ] } },
+    { "id": "RF-PEDS-LETHARGY", "label": "ילד ישנוני מאוד / קשה להעיר / אינו שותה", "en": "Child lethargic / hard to wake", "action": "101", "source": "NICE", "when": { "any": [ { "f": "peds_lethargic", "eq": true } ] } }
+  ],
+  "urgencyRules": [
+    { "id": "U-CHEST-ANY", "level": "same-day", "label": "כאב בחזה — הערכה ואק\"ג באותו יום גם ללא סימני אזהרה", "source": "HEART", "when": { "f": "category", "eq": "chest" } },
+    { "id": "U-SEV-HIGH", "level": "same-day", "label": "עוצמת כאב/מצוקה ≥8", "source": "MTS", "when": { "f": "severity", "gte": 8 } },
+    { "id": "U-ACUTE-MOD", "level": "same-day", "label": "הופעה חריפה (היום) עם עוצמה ≥6", "source": "ESI", "when": { "all": [ { "f": "onset", "in": ["hour", "today"] }, { "f": "severity", "gte": 6 } ] } },
+    { "id": "U-FEVER-HIGH", "level": "same-day", "label": "חום ≥39.5°C", "source": "NICE", "when": { "f": "fever_temp", "eq": "high" } },
+    { "id": "U-FEVER-IMMUNO", "level": "same-day", "label": "חום במטופל מדוכא חיסון / תחת טיפול אונקולוגי", "source": "NICE", "when": { "all": [ { "any": [ { "f": "category", "eq": "fever" }, { "f": "onc_fever", "eq": true } ] }, { "any": [ { "f": "history", "hasAny": ["immuno", "cancer"] }, { "f": "onc_active", "eq": true } ] } ] } },
+    { "id": "U-PEDS-INFANT", "level": "same-day", "label": "ילד מתחת לגיל שנתיים עם חום", "source": "NICE", "when": { "all": [ { "f": "age", "lt": 2 }, { "f": "category", "eq": "fever" } ] } },
+    { "id": "U-PREG", "level": "same-day", "label": "הריון עם תלונה בטנית/גינקולוגית", "source": "ACOG", "when": { "all": [ { "f": "pregnant", "eq": true }, { "f": "category", "in": ["abdominal", "obgyn"] } ] } },
+    { "id": "U-ABD-RLQ", "level": "same-day", "label": "כאב בטן ימנית תחתונה או בטן עם חום", "source": "ACR", "when": { "all": [ { "f": "category", "eq": "abdominal" }, { "any": [ { "f": "abd_location", "eq": "rlq" }, { "f": "abd_fever", "eq": true } ] } ] } },
+    { "id": "U-EYE-RED", "level": "same-day", "label": "עין אדומה וכואבת עם ירידה בראייה", "source": "MTS", "when": { "f": "eye_redpain", "eq": true } },
+    { "id": "U-URO-PYELO", "level": "same-day", "label": "תסמיני שתן עם חום / כאב מותני", "source": "NICE", "when": { "all": [ { "f": "category", "eq": "urinary" }, { "f": "uro_fever_flank", "eq": true } ] } },
+    { "id": "U-HEME-ANTICOAG", "level": "same-day", "label": "דימום / חבלה תחת נוגדי קרישה", "source": "LOCAL", "when": { "f": "heme_anticoag", "eq": true } },
+    { "id": "U-BREATH-MOD", "level": "same-day", "label": "קוצר נשימה במאמץ קל / החמרה", "source": "MTS", "when": { "all": [ { "f": "category", "eq": "breathing" }, { "f": "severity", "gte": 6 } ] } },
+    { "id": "U-SWELL-DVT", "level": "same-day", "label": "נפיחות חד-צדדית של רגל (שקול DVT)", "source": "WELLS", "when": { "f": "swell_unilateral", "eq": true } },
+    { "id": "U-PSYCH-RISK", "level": "same-day", "label": "מצוקה נפשית משמעותית ללא כוונה מיידית", "source": "C-SSRS", "when": { "all": [ { "f": "category", "eq": "psych" }, { "f": "severity", "gte": 7 } ] } },
+    { "id": "U-INJURY-WEIGHT", "level": "same-day", "label": "חבלה עם אי-יכולת לשאת משקל / עיוות", "source": "OTTAWA", "when": { "any": [ { "f": "injury_deform", "eq": true }, { "f": "injury_weight", "eq": false } ] } },
+    { "id": "U-MOD", "level": "within-days", "label": "עוצמה בינונית (4–7)", "source": "MTS", "when": { "f": "severity", "gte": 4 } },
+    { "id": "U-ONC-WEIGHT", "level": "within-days", "label": "ירידה לא מוסברת במשקל / גוש חדש — בירור מזורז", "source": "NICE", "when": { "any": [ { "f": "onc_weight", "eq": true }, { "f": "onc_lump", "eq": true } ] } },
+    { "id": "U-MILD-CHRONIC", "level": "routine", "label": "תסמינים קלים / כרוניים ויציבים", "source": "MTS", "when": { "all": [ { "f": "severity", "lte": 3 } ] } }
+  ],
+  "defaultUrgency": { "id": "U-DEFAULT", "level": "within-days", "label": "ברירת מחדל כשאין כלל תואם", "source": "LOCAL" },
+  "generalRedFlagQuestion": { "id": "rf_general", "text": "האם קרה לך אחד מהבאים? אפשר לבחור כמה.", "type": "multi", "options": [ { "v": "loc", "label": "התעלפתי / איבדתי הכרה" }, { "v": "seizure", "label": "פרכוס" }, { "v": "bleeding", "label": "דימום חזק שלא נעצר" }, { "v": "throat", "label": "נפיחות בגרון/לשון או קושי לבלוע" }, { "v": "confusion", "label": "בלבול חדש" }, { "v": "none", "label": "אף אחד מאלה" } ] },
+  "pediatricQuestions": [
+    { "id": "peds_lethargic", "text": "האם הילד/ה ישנוני/ת מאוד, קשה להעיר או מסרב/ת לשתות?", "type": "yesno" },
+    { "id": "peds_wet", "text": "האם היו חיתולים רטובים / מתן שתן ב-12 השעות האחרונות?", "type": "yesno" }
+  ],
+  "pregnancyQuestions": [
+    { "id": "pregnant", "text": "האם את בהריון או ייתכן שאת בהריון?", "type": "yesno" },
+    { "id": "preg_warning", "text": "האם יש אחד מהבאים?", "type": "multi", "when": { "f": "pregnant", "eq": true }, "options": [ { "v": "bleeding", "label": "דימום וגינלי משמעותי" }, { "v": "pain", "label": "כאב בטן חזק" }, { "v": "headache_vision", "label": "כאב ראש חזק עם טשטוש ראייה" }, { "v": "fluid", "label": "ירידת מים" }, { "v": "no_movement", "label": "ירידה בתנועות עובר" }, { "v": "none", "label": "אף אחד מאלה" } ] }
+  ],
+  "categories": {
+    "chest": {
+      "label": "כאב בחזה", "specialty": "קרדיולוגיה", "keywords": ["חזה", "לב", "דפיקות", "לחץ בחזה", "chest", "heart", "palpitation"],
+      "questions": [
+        { "id": "chest_radiation", "text": "האם הכאב מקרין ליד, לכתף, ללסת או לגב?", "type": "yesno" },
+        { "id": "chest_sweat", "text": "האם יש הזעה קרה, בחילה או סחרחורת יחד עם הכאב?", "type": "yesno" },
+        { "id": "chest_sob", "text": "האם יש קוצר נשימה יחד עם הכאב?", "type": "yesno" },
+        { "id": "chest_exertion", "text": "האם הכאב מופיע או מחמיר במאמץ?", "type": "yesno" },
+        { "id": "chest_pleuritic", "text": "האם הכאב מחמיר בנשימה עמוקה או בלחיצה על בית החזה?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-ACS", "name": "תסמונת כלילית חריפה (ACS)", "base": 3, "boost": [ { "when": { "f": "chest_exertion", "eq": true }, "w": 3 }, { "when": { "f": "history", "hasAny": ["heart", "diabetes", "htn"] }, "w": 2 }, { "when": { "f": "age", "gte": 45 }, "w": 2 } ], "source": "HEART" },
+        { "id": "DX-PE", "name": "תסחיף ריאתי (PE)", "base": 1, "boost": [ { "when": { "f": "chest_pleuritic", "eq": true }, "w": 2 }, { "when": { "f": "chest_sob", "eq": true }, "w": 2 } ], "source": "WELLS" },
+        { "id": "DX-MSK-CHEST", "name": "כאב שרירי-שלדי / קוסטוכונדריטיס", "base": 2, "boost": [ { "when": { "f": "chest_pleuritic", "eq": true }, "w": 2 }, { "when": { "f": "age", "lt": 40 }, "w": 1 } ], "source": "LOCAL" },
+        { "id": "DX-GERD", "name": "ריפלוקס / מקור עיכולי", "base": 1, "boost": [], "source": "LOCAL" },
+        { "id": "DX-PERICARD", "name": "פריקרדיטיס", "base": 1, "boost": [ { "when": { "f": "chest_pleuritic", "eq": true }, "w": 1 } ], "source": "ESC" }
+      ],
+      "workup": [ { "text": "אק\"ג 12 לידים בהקדם; טרופונין סדרתי (hs-Tn) לפי פרוטוקול", "source": "ESC" }, { "text": "חישוב HEART score; D-dimer רק אם הסתברות PE נמוכה (Wells/PERC)", "source": "WELLS" } ],
+      "imaging": [ { "text": "צילום חזה כקו ראשון; CTPA אם חשד ל-PE גבוה או D-dimer חיובי (ACR: Chest pain — suspected PE)", "source": "ACR" } ],
+      "treatment": [ { "text": "בחשד ל-ACS: הפניה מיידית; שקילת אספירין לפי פרוטוקול ובהיעדר התוויות נגד — החלטת קלינאי", "source": "ESC" } ]
+    },
+    "breathing": {
+      "label": "קוצר נשימה / שיעול", "specialty": "ריאות", "keywords": ["נשימה", "שיעול", "צפצופים", "אסתמה", "breath", "cough", "wheez", "asthma"],
+      "questions": [
+        { "id": "breath_speech", "text": "האם קשה לך לסיים משפט בגלל קוצר נשימה, גם במנוחה?", "type": "yesno" },
+        { "id": "breath_cyanosis", "text": "האם השפתיים או האצבעות נראות כחולות/אפורות?", "type": "yesno" },
+        { "id": "breath_fever", "text": "האם יש חום או כיח צבעוני?", "type": "yesno" },
+        { "id": "breath_wheeze", "text": "האם יש צפצופים או רקע של אסתמה/COPD?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-PNEUMONIA", "name": "דלקת ריאות", "base": 2, "boost": [ { "when": { "f": "breath_fever", "eq": true }, "w": 3 } ], "source": "NICE" },
+        { "id": "DX-ASTHMA", "name": "התלקחות אסתמה / COPD", "base": 2, "boost": [ { "when": { "f": "breath_wheeze", "eq": true }, "w": 3 } ], "source": "LOCAL" },
+        { "id": "DX-URTI", "name": "זיהום דרכי נשימה עליונות / ויראלי", "base": 2, "boost": [], "source": "LOCAL" },
+        { "id": "DX-HF", "name": "אי-ספיקת לב", "base": 1, "boost": [ { "when": { "f": "history", "hasAny": ["heart"] }, "w": 3 }, { "when": { "f": "age", "gte": 65 }, "w": 1 } ], "source": "ESC" },
+        { "id": "DX-PE2", "name": "תסחיף ריאתי (PE)", "base": 1, "boost": [], "source": "WELLS" }
+      ],
+      "workup": [ { "text": "סטורציה, קצב נשימה, טמפ'; ספירת דם ו-CRP לפי שיקול", "source": "NICE" }, { "text": "BNP/NT-proBNP בחשד לאי-ספיקת לב", "source": "ESC" } ],
+      "imaging": [ { "text": "צילום חזה בחשד לדלקת ריאות/אי-ספיקת לב (ACR: Acute respiratory illness)", "source": "ACR" } ],
+      "treatment": [ { "text": "שקילת מרחיבי סימפונות בהתלקחות אסתמה; טיפול אנטיביוטי לפי הנחיה מקומית אם חשד חיידקי", "source": "LOCAL" } ]
+    },
+    "abdominal": {
+      "label": "כאב בטן", "specialty": "גסטרו / כירורגיה", "keywords": ["בטן", "בחילה", "הקאה", "שלשול", "עצירות", "abdomen", "stomach", "nausea", "vomit", "diarr"],
+      "questions": [
+        { "id": "abd_location", "text": "איפה הכאב בעיקר?", "type": "choice", "options": [ { "v": "rlq", "label": "ימין למטה" }, { "v": "ruq", "label": "ימין למעלה" }, { "v": "epi", "label": "מרכז עליון" }, { "v": "llq", "label": "שמאל למטה" }, { "v": "diffuse", "label": "מפושט" } ] },
+        { "id": "abd_blood", "text": "האם הקאת דם או שהצואה שחורה/דמית?", "type": "yesno" },
+        { "id": "abd_fever", "text": "האם יש חום?", "type": "yesno" },
+        { "id": "abd_vomit", "text": "האם יש הקאות חוזרות או חוסר יכולת לשתות?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-APPY", "name": "דלקת תוספתן", "base": 1, "boost": [ { "when": { "f": "abd_location", "eq": "rlq" }, "w": 4 }, { "when": { "f": "abd_fever", "eq": true }, "w": 1 } ], "source": "ACR" },
+        { "id": "DX-BILIARY", "name": "מחלת דרכי מרה / כולציסטיטיס", "base": 1, "boost": [ { "when": { "f": "abd_location", "eq": "ruq" }, "w": 4 } ], "source": "ACR" },
+        { "id": "DX-GASTRO", "name": "גסטרואנטריטיס", "base": 2, "boost": [ { "when": { "f": "abd_vomit", "eq": true }, "w": 2 } ], "source": "LOCAL" },
+        { "id": "DX-PUD", "name": "דלקת קיבה / כיב פפטי", "base": 1, "boost": [ { "when": { "f": "abd_location", "eq": "epi" }, "w": 3 } ], "source": "LOCAL" },
+        { "id": "DX-DIVERT", "name": "דיברטיקוליטיס", "base": 1, "boost": [ { "when": { "f": "abd_location", "eq": "llq" }, "w": 3 }, { "when": { "f": "age", "gte": 50 }, "w": 1 } ], "source": "ACR" }
+      ],
+      "workup": [ { "text": "ספירת דם, CRP, תפקודי כבד, ליפאז, כימיה; בדיקת הריון בנשים בגיל הפוריות", "source": "LOCAL" } ],
+      "imaging": [ { "text": "US בטן לכאב RUQ; CT בטן עם ניגוד לכאב RLQ/LLQ במבוגר; US קודם בילדים ובהריון (ACR: Acute abdominal pain)", "source": "ACR" } ],
+      "treatment": [ { "text": "שקילת משככי כאבים ונוגדי הקאה; הידרציה; הימנעות מ-NSAIDs בחשד לכיב", "source": "LOCAL" } ]
+    },
+    "fever": {
+      "label": "חום / זיהום", "specialty": "מחלות זיהומיות", "keywords": ["חום", "צמרמורת", "זיהום", "fever", "chills", "infection"],
+      "questions": [
+        { "id": "fever_temp", "text": "מה החום הגבוה ביותר שנמדד?", "type": "choice", "options": [ { "v": "low", "label": "עד 38.4" }, { "v": "mid", "label": "38.5–39.4" }, { "v": "high", "label": "39.5 ומעלה" }, { "v": "unknown", "label": "לא נמדד" } ] },
+        { "id": "fever_neck", "text": "האם יש נוקשות צוואר (קושי להצמיד סנטר לחזה)?", "type": "yesno" },
+        { "id": "fever_rash_nonblanch", "text": "האם יש פריחה שלא נעלמת כשלוחצים עליה בכוס זכוכית?", "type": "yesno" },
+        { "id": "fever_source", "text": "האם יש מקור ברור? (שיעול, צריבה בשתן, כאב גרון, אוזן)", "type": "multi", "options": [ { "v": "resp", "label": "שיעול/גרון" }, { "v": "uti", "label": "שתן" }, { "v": "ear", "label": "אוזן" }, { "v": "skin", "label": "עור/פצע" }, { "v": "none", "label": "אין מקור ברור" } ] }
+      ],
+      "differentials": [
+        { "id": "DX-VIRAL", "name": "זיהום ויראלי", "base": 3, "boost": [ { "when": { "f": "fever_source", "hasAny": ["resp"] }, "w": 1 } ], "source": "LOCAL" },
+        { "id": "DX-UTI", "name": "דלקת בדרכי השתן / פיאלונפריטיס", "base": 1, "boost": [ { "when": { "f": "fever_source", "hasAny": ["uti"] }, "w": 4 } ], "source": "NICE" },
+        { "id": "DX-CELLULITIS", "name": "צלוליטיס / זיהום עור", "base": 1, "boost": [ { "when": { "f": "fever_source", "hasAny": ["skin"] }, "w": 4 } ], "source": "LOCAL" },
+        { "id": "DX-SEPSIS", "name": "ספסיס (לשלול)", "base": 1, "boost": [ { "when": { "f": "fever_temp", "eq": "high" }, "w": 2 }, { "when": { "f": "history", "hasAny": ["immuno", "cancer"] }, "w": 2 } ], "source": "NICE" }
+      ],
+      "workup": [ { "text": "סימנים חיוניים, הערכת סיכון לספסיס (NEWS2/qSOFA); ספירה, CRP, תרביות לפי מקור", "source": "NICE" }, { "text": "בדיקת שתן ותרבית בחשד ל-UTI", "source": "NICE" } ],
+      "imaging": [ { "text": "צילום חזה אם מקור נשימתי; הדמיה לפי מקור חשוד", "source": "ACR" } ],
+      "treatment": [ { "text": "טיפול להורדת חום ונוזלים; אנטיביוטיקה רק עם מקור חיידקי סביר לפי הנחיה מקומית", "source": "LOCAL" } ]
+    },
+    "skin": {
+      "label": "פריחה / בעיית עור", "specialty": "עור", "film": true, "keywords": ["פריחה", "גירוד", "עור", "שומה", "rash", "itch", "skin", "mole", "hives"],
+      "questions": [
+        { "id": "skin_spread", "text": "האם הפריחה מתפשטת במהירות?", "type": "yesno" },
+        { "id": "skin_throat", "text": "האם יש גם נפיחות בשפתיים/לשון/גרון או קושי בנשימה?", "type": "yesno" },
+        { "id": "skin_new_exposure", "text": "האם התחלת תרופה, מזון או חומר חדש לאחרונה?", "type": "yesno" },
+        { "id": "skin_mole_change", "text": "האם מדובר בשומה שמשנה צבע, גודל או צורה?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-URTICARIA", "name": "אורטיקריה / תגובה אלרגית", "base": 2, "boost": [ { "when": { "f": "skin_new_exposure", "eq": true }, "w": 3 } ], "source": "WAO" },
+        { "id": "DX-DERMATITIS", "name": "דרמטיטיס / אקזמה", "base": 2, "boost": [], "source": "LOCAL" },
+        { "id": "DX-VIRAL-EXANTH", "name": "פריחה ויראלית", "base": 1, "boost": [ { "when": { "f": "fever_temp", "in": ["mid", "high"] }, "w": 2 } ], "source": "LOCAL" },
+        { "id": "DX-MELANOMA", "name": "נגע פיגמנטרי חשוד (לשלול מלנומה)", "base": 0, "boost": [ { "when": { "f": "skin_mole_change", "eq": true }, "w": 5 } ], "source": "NICE" },
+        { "id": "DX-DRUG-ERUPT", "name": "תפרחת תרופתית (שקול SJS/DRESS אם מערכתי)", "base": 0, "boost": [ { "when": { "f": "skin_new_exposure", "eq": true }, "w": 2 }, { "when": { "f": "skin_spread", "eq": true }, "w": 2 } ], "source": "LOCAL" }
+      ],
+      "workup": [ { "text": "סקירת הסרטון/תמונה; דרמוסקופיה לנגע פיגמנטרי; בדיקות דם רק אם סימנים מערכתיים", "source": "LOCAL" } ],
+      "imaging": [ { "text": "בדרך כלל אין צורך בהדמיה", "source": "ACR" } ],
+      "treatment": [ { "text": "הפסקת חשיפה חשודה; שקילת אנטיהיסטמינים/סטרואידים מקומיים; הפניה לעור בנגע חשוד", "source": "LOCAL" } ]
+    },
+    "injury": {
+      "label": "חבלה / פצע", "specialty": "אורתופדיה / טראומה", "film": true, "keywords": ["נפלתי", "חבלה", "פצע", "חתך", "נקע", "שבר", "כוויה", "injury", "wound", "cut", "fall", "sprain", "burn"],
+      "questions": [
+        { "id": "injury_bleeding", "text": "האם יש דימום חזק שלא נעצר אחרי 10 דקות לחץ?", "type": "yesno" },
+        { "id": "injury_weight", "text": "האם אפשר לדרוך / להזיז את האיבר?", "type": "yesno" },
+        { "id": "injury_deform", "text": "האם יש עיוות ברור של האיבר?", "type": "yesno" },
+        { "id": "injury_head", "text": "האם הייתה גם מכה בראש?", "type": "yesno" },
+        { "id": "injury_tetanus", "text": "האם קיבלת חיסון טטנוס ב-10 השנים האחרונות?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-FRACTURE", "name": "שבר", "base": 1, "boost": [ { "when": { "f": "injury_deform", "eq": true }, "w": 4 }, { "when": { "f": "injury_weight", "eq": false }, "w": 3 } ], "source": "OTTAWA" },
+        { "id": "DX-SPRAIN", "name": "נקע / חבלת רקמה רכה", "base": 3, "boost": [], "source": "OTTAWA" },
+        { "id": "DX-LACERATION", "name": "חתך הדורש סגירה", "base": 1, "boost": [], "source": "LOCAL" },
+        { "id": "DX-TBI", "name": "חבלת ראש (שקול כללי CT לראש)", "base": 0, "boost": [ { "when": { "f": "injury_head", "eq": true }, "w": 4 } ], "source": "NICE" }
+      ],
+      "workup": [ { "text": "החלת כללי אוטווה (קרסול/ברך); בדיקה נוירו-וסקולרית דיסטלית", "source": "OTTAWA" } ],
+      "imaging": [ { "text": "צילום רנטגן לפי כללי אוטווה; CT ראש לפי כללים קליניים בחבלת ראש (ACR: Head trauma)", "source": "ACR" } ],
+      "treatment": [ { "text": "RICE, משככי כאבים; טיפול בפצע; השלמת טטנוס אם לא עודכן", "source": "LOCAL" } ]
+    },
+    "swelling": {
+      "label": "נפיחות / כלי דם", "specialty": "כלי דם / ראומטולוגיה", "film": true, "keywords": ["נפיחות", "נפוח", "בצקת", "swelling", "swollen", "edema"],
+      "questions": [
+        { "id": "swell_unilateral", "text": "האם הנפיחות ברגל אחת בלבד, עם כאב או אודם?", "type": "yesno" },
+        { "id": "swell_cold", "text": "האם הגפה קרה, חיוורת וכואבת מאוד?", "type": "yesno" },
+        { "id": "swell_joint", "text": "האם הנפיחות סביב מפרק, עם חום מקומי?", "type": "yesno" },
+        { "id": "swell_bilateral", "text": "האם הנפיחות בשתי הרגליים ומחמירה בערב?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-DVT", "name": "פקקת ורידים עמוקים (DVT)", "base": 1, "boost": [ { "when": { "f": "swell_unilateral", "eq": true }, "w": 4 } ], "source": "WELLS" },
+        { "id": "DX-GOUT", "name": "שגדון / דלקת מפרק (לשלול מפרק ספטי)", "base": 1, "boost": [ { "when": { "f": "swell_joint", "eq": true }, "w": 4 } ], "source": "LOCAL" },
+        { "id": "DX-EDEMA-SYS", "name": "בצקת מערכתית (לב/כליה/כבד/תרופתית)", "base": 1, "boost": [ { "when": { "f": "swell_bilateral", "eq": true }, "w": 4 } ], "source": "LOCAL" },
+        { "id": "DX-CELL2", "name": "צלוליטיס", "base": 1, "boost": [], "source": "LOCAL" }
+      ],
+      "workup": [ { "text": "Wells score ו-D-dimer בחשד DVT; חומצה אורית, CRP; ניקור מפרק בחשד לספטי", "source": "WELLS" }, { "text": "בבצקת דו-צדדית: קריאטינין, אלבומין, תפקודי כבד, BNP, בדיקת שתן לחלבון", "source": "LOCAL" } ],
+      "imaging": [ { "text": "US דופלקס ורידי בחשד DVT (ACR: Suspected lower-extremity DVT)", "source": "ACR" } ],
+      "treatment": [ { "text": "בחשד DVT: שקילת נוגדי קרישה לפי פרוטוקול לאחר הערכה; הרמת גפה", "source": "ESC" } ]
+    },
+    "neuro": {
+      "label": "כאב ראש / נוירולוגי", "specialty": "נוירולוגיה", "keywords": ["ראש", "סחרחורת", "חולשה", "נימול", "מיגרנה", "headache", "dizz", "numb", "weakness", "migraine"],
+      "questions": [
+        { "id": "neuro_fast", "text": "האם יש אחד מאלה עכשיו?", "type": "multi", "options": [ { "v": "face", "label": "צד אחד של הפנים צנוח" }, { "v": "arm", "label": "חולשה ביד/רגל בצד אחד" }, { "v": "speech", "label": "קושי לדבר או להבין" }, { "v": "none", "label": "אף אחד" } ] },
+        { "id": "neuro_sudden", "text": "האם כאב הראש התחיל פתאום, תוך שניות, והוא הכי חזק שהיה לך אי פעם?", "type": "yesno" },
+        { "id": "neuro_pattern", "text": "האם זה דומה לכאבי ראש שהיו לך בעבר?", "type": "yesno" },
+        { "id": "neuro_visual", "text": "האם יש הפרעות ראייה, רגישות לאור או בחילה?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-MIGRAINE", "name": "מיגרנה", "base": 2, "boost": [ { "when": { "f": "neuro_visual", "eq": true }, "w": 2 }, { "when": { "f": "neuro_pattern", "eq": true }, "w": 2 } ], "source": "LOCAL" },
+        { "id": "DX-TENSION", "name": "כאב ראש מסוג מתח", "base": 2, "boost": [ { "when": { "f": "neuro_pattern", "eq": true }, "w": 1 } ], "source": "LOCAL" },
+        { "id": "DX-SAH", "name": "דימום תת-עכבישי (לשלול)", "base": 0, "boost": [ { "when": { "f": "neuro_sudden", "eq": true }, "w": 6 } ], "source": "NICE" },
+        { "id": "DX-STROKE", "name": "שבץ / TIA", "base": 0, "boost": [ { "when": { "f": "neuro_fast", "hasAny": ["face", "arm", "speech"] }, "w": 6 }, { "when": { "f": "age", "gte": 55 }, "w": 1 } ], "source": "FAST" },
+        { "id": "DX-VERTIGO", "name": "ורטיגו פריפרי", "base": 1, "boost": [], "source": "LOCAL" }
+      ],
+      "workup": [ { "text": "בדיקה נוירולוגית; לחץ דם; בכאב ראש חדש מעל גיל 50 — שקילת ESR/CRP (דלקת עורקים רקתית)", "source": "LOCAL" } ],
+      "imaging": [ { "text": "CT ראש ללא ניגוד בכאב ראש פתאומי/סימנים נוירולוגיים; MRI לבירור לא דחוף (ACR: Headache)", "source": "ACR" } ],
+      "treatment": [ { "text": "טיפול סימפטומטי במיגרנה; הימנעות משימוש-יתר במשככים", "source": "LOCAL" } ]
+    },
+    "endocrine": {
+      "label": "סוכר / בלוטת התריס", "specialty": "אנדוקרינולוגיה", "keywords": ["סוכר", "סוכרת", "תריס", "צמא", "השתנה", "diabetes", "sugar", "thyroid", "thirst"],
+      "questions": [
+        { "id": "endo_glucose", "text": "האם נמדדו ערכי סוכר גבוהים מאוד (מעל 300) או נמוכים (מתחת 70)?", "type": "yesno" },
+        { "id": "endo_polyuria", "text": "האם יש צמא מוגבר, השתנה מרובה או ירידה במשקל?", "type": "yesno" },
+        { "id": "endo_thyroid", "text": "האם יש דפיקות לב, רעד, עייפות קיצונית או שינוי חד במשקל?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-HYPERGLY", "name": "היפרגליקמיה / סוכרת לא מאוזנת (שקול DKA/HHS)", "base": 1, "boost": [ { "when": { "f": "endo_glucose", "eq": true }, "w": 3 }, { "when": { "f": "endo_polyuria", "eq": true }, "w": 3 } ], "source": "LOCAL" },
+        { "id": "DX-THYROID", "name": "תת/יתר פעילות בלוטת התריס", "base": 1, "boost": [ { "when": { "f": "endo_thyroid", "eq": true }, "w": 3 } ], "source": "LOCAL" }
+      ],
+      "workup": [ { "text": "גלוקוז, HbA1c, כימיה, קטונים בשתן/דם; TSH ו-FT4", "source": "LOCAL" } ],
+      "imaging": [ { "text": "US בלוטת התריס רק אם קשרית מוחשת (ACR: Thyroid nodule)", "source": "ACR" } ],
+      "treatment": [ { "text": "התאמת טיפול היפוגליקמי; הדרכה; בחשד DKA — מיון", "source": "LOCAL" } ]
+    },
+    "urinary": {
+      "label": "שתן / כליות", "specialty": "נפרולוגיה / אורולוגיה", "keywords": ["שתן", "צריבה", "כליה", "אשך", "urine", "burning", "kidney", "testic"],
+      "questions": [
+        { "id": "uro_dysuria", "text": "האם יש צריבה או תכיפות במתן שתן?", "type": "yesno" },
+        { "id": "uro_fever_flank", "text": "האם יש חום או כאב בגב התחתון בצד?", "type": "yesno" },
+        { "id": "uro_colic", "text": "האם יש כאב גלי חזק מהמותן לכיוון המפשעה?", "type": "yesno" },
+        { "id": "uro_testis", "text": "האם יש כאב אשך פתאומי וחזק?", "type": "yesno", "when": { "f": "sex", "eq": "male" } }
+      ],
+      "differentials": [
+        { "id": "DX-CYSTITIS", "name": "דלקת שלפוחית", "base": 2, "boost": [ { "when": { "f": "uro_dysuria", "eq": true }, "w": 3 } ], "source": "NICE" },
+        { "id": "DX-PYELO", "name": "פיאלונפריטיס", "base": 0, "boost": [ { "when": { "f": "uro_fever_flank", "eq": true }, "w": 5 } ], "source": "NICE" },
+        { "id": "DX-STONE", "name": "אבן בכליה", "base": 1, "boost": [ { "when": { "f": "uro_colic", "eq": true }, "w": 4 } ], "source": "ACR" }
+      ],
+      "workup": [ { "text": "בדיקת שתן כללית ותרבית; קריאטינין; בדיקת הריון בנשים", "source": "NICE" } ],
+      "imaging": [ { "text": "CT ללא ניגוד במינון נמוך בחשד לאבן; US בהריון/צעירים (ACR: Acute onset flank pain)", "source": "ACR" } ],
+      "treatment": [ { "text": "אנטיביוטיקה לפי תרבית/הנחיה מקומית; משככי כאבים בקוליק", "source": "LOCAL" } ]
+    },
+    "msk": {
+      "label": "כאב מפרקים / גב", "specialty": "ראומטולוגיה / אורתופדיה", "keywords": ["גב", "מפרק", "ברך", "כתף", "back", "joint", "knee", "shoulder"],
+      "questions": [
+        { "id": "msk_neuro", "text": "האם יש חולשה ברגליים, אי-שליטה בסוגרים או נימול במפשעה?", "type": "yesno" },
+        { "id": "msk_morning", "text": "האם יש נוקשות בוקר מעל חצי שעה או מפרקים נפוחים רבים?", "type": "yesno" },
+        { "id": "msk_trauma", "text": "האם הכאב התחיל אחרי מאמץ או תנועה מסוימת?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-MECH-BACK", "name": "כאב גב מכני", "base": 3, "boost": [ { "when": { "f": "msk_trauma", "eq": true }, "w": 2 } ], "source": "LOCAL" },
+        { "id": "DX-CAUDA", "name": "תסמונת זנב הסוס (לשלול)", "base": 0, "boost": [ { "when": { "f": "msk_neuro", "eq": true }, "w": 6 } ], "source": "NICE" },
+        { "id": "DX-INFLAM-ARTH", "name": "דלקת מפרקים דלקתית", "base": 0, "boost": [ { "when": { "f": "msk_morning", "eq": true }, "w": 4 } ], "source": "LOCAL" }
+      ],
+      "workup": [ { "text": "בדיקה נוירולוגית בגפיים תחתונות; CRP/ESR, RF/anti-CCP בחשד דלקתי", "source": "LOCAL" } ],
+      "imaging": [ { "text": "ללא הדמיה בכאב גב לא מסובך מתחת ל-6 שבועות; MRI דחוף בדגלים אדומים (ACR: Low back pain)", "source": "ACR" } ],
+      "treatment": [ { "text": "פעילות מותאמת, פיזיותרפיה, משככי כאבים; MRI ומיון בחשד לזנב הסוס", "source": "LOCAL" } ]
+    },
+    "ent": {
+      "label": "אוזן / גרון / אף", "specialty": "אא\"ג", "keywords": ["גרון", "אוזן", "אף", "סינוס", "בליעה", "throat", "ear", "sinus", "nose"],
+      "questions": [
+        { "id": "ent_drool", "text": "האם יש קושי חמור לבלוע רוק או קול 'חנוק'?", "type": "yesno" },
+        { "id": "ent_ear", "text": "האם יש כאב אוזן או הפרשה מהאוזן?", "type": "yesno" },
+        { "id": "ent_sinus", "text": "האם יש גודש באף וכאב בפנים מעל 10 ימים?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-PHARYNG", "name": "דלקת גרון (ויראלית/סטרפטוקוק)", "base": 3, "boost": [], "source": "LOCAL" },
+        { "id": "DX-PERITONS", "name": "מורסה פריטונסילרית / אפיגלוטיטיס (לשלול)", "base": 0, "boost": [ { "when": { "f": "ent_drool", "eq": true }, "w": 6 } ], "source": "LOCAL" },
+        { "id": "DX-OTITIS", "name": "דלקת אוזן", "base": 0, "boost": [ { "when": { "f": "ent_ear", "eq": true }, "w": 4 } ], "source": "LOCAL" },
+        { "id": "DX-SINUSITIS", "name": "סינוסיטיס", "base": 0, "boost": [ { "when": { "f": "ent_sinus", "eq": true }, "w": 4 } ], "source": "LOCAL" }
+      ],
+      "workup": [ { "text": "ציון Centor/McIsaac; משטח גרון לפי ציון", "source": "LOCAL" } ],
+      "imaging": [ { "text": "אין הדמיה שגרתית בסינוסיטיס לא מסובכת (ACR: Sinonasal disease)", "source": "ACR" } ],
+      "treatment": [ { "text": "טיפול סימפטומטי; אנטיביוטיקה רק לפי קריטריונים", "source": "LOCAL" } ]
+    },
+    "eye": {
+      "label": "עיניים", "specialty": "עיניים", "keywords": ["עין", "ראייה", "eye", "vision"],
+      "questions": [
+        { "id": "eye_loss", "text": "האם הייתה ירידה פתאומית בראייה או 'וילון' על העין?", "type": "yesno" },
+        { "id": "eye_redpain", "text": "האם העין אדומה, כואבת ויש ירידה בראייה או רגישות חזקה לאור?", "type": "yesno" },
+        { "id": "eye_discharge", "text": "האם יש הפרשה דביקה ללא כאב משמעותי?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-CONJ", "name": "דלקת לחמית", "base": 2, "boost": [ { "when": { "f": "eye_discharge", "eq": true }, "w": 3 } ], "source": "LOCAL" },
+        { "id": "DX-GLAUCOMA", "name": "גלאוקומה חדה / אובאיטיס / קרטיטיס", "base": 0, "boost": [ { "when": { "f": "eye_redpain", "eq": true }, "w": 5 } ], "source": "LOCAL" },
+        { "id": "DX-RD", "name": "היפרדות רשתית / חסימת כלי דם ברשתית", "base": 0, "boost": [ { "when": { "f": "eye_loss", "eq": true }, "w": 6 } ], "source": "LOCAL" }
+      ],
+      "workup": [ { "text": "חדות ראייה, בדיקת אישונים; הפניה לרופא עיניים בדגלים אדומים", "source": "LOCAL" } ],
+      "imaging": [ { "text": "לפי רופא עיניים (OCT/US עין)", "source": "ACR" } ],
+      "treatment": [ { "text": "היגיינה וטיפות לפי צורך; הימנעות מסטרואידים מקומיים ללא בדיקת עיניים", "source": "LOCAL" } ]
+    },
+    "obgyn": {
+      "label": "נשים / הריון", "specialty": "גינקולוגיה ומיילדות", "keywords": ["הריון", "וסת", "גינקולוג", "דימום וגינלי", "pregnan", "period", "vaginal"],
+      "questions": [
+        { "id": "gyn_bleeding", "text": "האם יש דימום וגינלי חריג או כבד?", "type": "yesno" },
+        { "id": "gyn_pain", "text": "האם יש כאב באגן או בבטן התחתונה?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-ECTOPIC", "name": "הריון מחוץ לרחם (לשלול בכל אישה בגיל הפוריות)", "base": 0, "boost": [ { "when": { "all": [ { "f": "gyn_pain", "eq": true }, { "f": "gyn_bleeding", "eq": true } ] }, "w": 4 }, { "when": { "f": "pregnant", "eq": true }, "w": 2 } ], "source": "ACOG" },
+        { "id": "DX-PID", "name": "דלקת אגן (PID) / ציסטה שחלתית", "base": 1, "boost": [ { "when": { "f": "gyn_pain", "eq": true }, "w": 2 } ], "source": "LOCAL" },
+        { "id": "DX-AUB", "name": "דימום רחמי חריג", "base": 1, "boost": [ { "when": { "f": "gyn_bleeding", "eq": true }, "w": 3 } ], "source": "LOCAL" }
+      ],
+      "workup": [ { "text": "β-hCG; ספירת דם; בדיקה גינקולוגית", "source": "ACOG" } ],
+      "imaging": [ { "text": "US טרנס-וגינלי כקו ראשון (ACR: Acute pelvic pain in reproductive age)", "source": "ACR" } ],
+      "treatment": [ { "text": "לפי ממצאים; בהריון — ייעוץ מיילדותי", "source": "ACOG" } ]
+    },
+    "psych": {
+      "label": "מצב רוח / נפשי", "specialty": "פסיכיאטריה", "keywords": ["דיכאון", "חרדה", "לחץ נפשי", "מצב רוח", "שינה", "depress", "anxiety", "panic", "mood"],
+      "questions": [
+        { "id": "psych_selfharm", "text": "האם היו לך לאחרונה מחשבות לפגוע בעצמך או לשים קץ לחייך?", "type": "yesno" },
+        { "id": "psych_function", "text": "האם המצב פוגע ביכולת לתפקד בעבודה/בבית?", "type": "yesno" },
+        { "id": "psych_panic", "text": "האם יש התקפים פתאומיים של פחד עם דפיקות לב והזעה?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-DEPRESSION", "name": "אפיזודה דיכאונית", "base": 2, "boost": [ { "when": { "f": "psych_function", "eq": true }, "w": 2 } ], "source": "LOCAL" },
+        { "id": "DX-ANXIETY", "name": "הפרעת חרדה / פאניקה", "base": 2, "boost": [ { "when": { "f": "psych_panic", "eq": true }, "w": 3 } ], "source": "LOCAL" }
+      ],
+      "workup": [ { "text": "PHQ-9 / GAD-7; הערכת סיכון אובדני מובנית; TSH לפי שיקול", "source": "C-SSRS" } ],
+      "imaging": [ { "text": "אין צורך בהדמיה שגרתית", "source": "ACR" } ],
+      "treatment": [ { "text": "הפניה לטיפול נפשי; שקילת טיפול תרופתי; מידע על ער\"ן 1201", "source": "LOCAL" } ]
+    },
+    "oncology": {
+      "label": "גוש / ירידה במשקל / מטופל אונקולוגי", "specialty": "אונקולוגיה", "keywords": ["גוש", "סרטן", "כימותרפיה", "ירידה במשקל", "lump", "cancer", "chemo", "weight loss"],
+      "questions": [
+        { "id": "onc_active", "text": "האם את/ה מקבל/ת כרגע טיפול אונקולוגי (כימותרפיה/ביולוגי)?", "type": "yesno" },
+        { "id": "onc_fever", "text": "האם יש חום מעל 38?", "type": "yesno" },
+        { "id": "onc_weight", "text": "האם הייתה ירידה לא מוסברת במשקל (מעל 5% בחצי שנה)?", "type": "yesno" },
+        { "id": "onc_lump", "text": "האם נמצא גוש חדש שגדל?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-NEUTROPENIC", "name": "חום נויטרופני (לשלול)", "base": 0, "boost": [ { "when": { "all": [ { "f": "onc_active", "eq": true }, { "f": "onc_fever", "eq": true } ] }, "w": 7 } ], "source": "NICE" },
+        { "id": "DX-MALIG", "name": "תהליך ממאיר חדש/מתקדם (בירור)", "base": 1, "boost": [ { "when": { "f": "onc_weight", "eq": true }, "w": 3 }, { "when": { "f": "onc_lump", "eq": true }, "w": 3 } ], "source": "NICE" }
+      ],
+      "workup": [ { "text": "ספירה עם דיפרנציאל דחופה בחום תחת טיפול; בירור מזורז לפי מסלול חשד לממאירות", "source": "NICE" } ],
+      "imaging": [ { "text": "הדמיה לפי מיקום הגוש (US/ממוגרפיה/CT) — ACR לפי אזור", "source": "ACR" } ],
+      "treatment": [ { "text": "חום תחת כימותרפיה — פנייה דחופה למרכז האונקולוגי/מיון", "source": "NICE" } ]
+    },
+    "heme": {
+      "label": "דימומים / חבורות / אנמיה", "specialty": "המטולוגיה", "keywords": ["חבורות", "דימום מהאף", "אנמיה", "חולשה כללית", "bruis", "anemia", "nosebleed"],
+      "questions": [
+        { "id": "heme_anticoag", "text": "האם את/ה נוטל/ת מדללי דם (קומדין, אליקוויס, קסרלטו וכו')?", "type": "yesno" },
+        { "id": "heme_bruise", "text": "האם יש חבורות או נקודות אדומות על העור ללא סיבה?", "type": "yesno" },
+        { "id": "heme_fatigue", "text": "האם יש עייפות קיצונית, חיוורון או קוצר נשימה במאמץ?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-ANEMIA", "name": "אנמיה", "base": 1, "boost": [ { "when": { "f": "heme_fatigue", "eq": true }, "w": 3 } ], "source": "LOCAL" },
+        { "id": "DX-THROMBOCYTOPENIA", "name": "טרומבוציטופניה / הפרעת קרישה", "base": 0, "boost": [ { "when": { "f": "heme_bruise", "eq": true }, "w": 4 } ], "source": "LOCAL" },
+        { "id": "DX-OVERANTICOAG", "name": "נוגדי קרישה ברמה גבוהה מדי", "base": 0, "boost": [ { "when": { "f": "heme_anticoag", "eq": true }, "w": 4 } ], "source": "LOCAL" }
+      ],
+      "workup": [ { "text": "ספירת דם, משטח, INR/PT/PTT, פריטין, B12, חומצה פולית", "source": "LOCAL" } ],
+      "imaging": [ { "text": "לפי ממצאים", "source": "ACR" } ],
+      "treatment": [ { "text": "התאמת נוגדי קרישה לפי INR והערכת קלינאי", "source": "LOCAL" } ]
+    },
+    "general": {
+      "label": "כללי / אחר", "specialty": "רפואת משפחה", "keywords": [],
+      "questions": [
+        { "id": "gen_fatigue", "text": "האם יש עייפות, חולשה כללית או ירידה בתיאבון?", "type": "yesno" },
+        { "id": "gen_worse", "text": "האם המצב מחמיר מיום ליום?", "type": "yesno" }
+      ],
+      "differentials": [
+        { "id": "DX-NONSPEC", "name": "תסמינים לא ספציפיים — נדרשת הערכה קלינית", "base": 2, "boost": [], "source": "LOCAL" },
+        { "id": "DX-VIRAL2", "name": "מחלה ויראלית כללית", "base": 1, "boost": [], "source": "LOCAL" }
+      ],
+      "workup": [ { "text": "אנמנזה ובדיקה גופנית; ספירה, כימיה, TSH לפי שיקול", "source": "LOCAL" } ],
+      "imaging": [ { "text": "לפי ממצאי בדיקה", "source": "ACR" } ],
+      "treatment": [ { "text": "לפי הערכה קלינית", "source": "LOCAL" } ]
+    }
+  },
+  "pediatricNotes": { "text": "מטופל/ת מתחת לגיל 16: יש לפרש סימנים חיוניים וטווחי מעבדה לפי גיל; ספי חום בתינוקות נמוכים יותר (NICE traffic-light)", "source": "NICE" },
+  "filming": {
+    "prompts": {
+      "skin": "אנא צלם/י את אזור הפריחה מקרוב ובאור טוב, כ-10 שניות.",
+      "injury": "אנא צלם/י את הפצע או האזור הפגוע, כולל תנועה של האיבר אם אפשר.",
+      "swelling": "אנא צלם/י את האזור הנפוח, ואם אפשר גם את הצד השני להשוואה."
+    },
+    "maxSeconds": 15
+  }
+}
