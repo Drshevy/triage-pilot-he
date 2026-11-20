@@ -120,7 +120,13 @@ export const MULTI_LEX = {
 export const CHOICE_LEX = {
   abd_location: { rlq: ['ימין למטה', 'צד ימין למטה', 'ימני תחתון', 'למטה מימין'], ruq: ['ימין למעלה', 'מתחת לצלעות מימין', 'למעלה מימין'], epi: ['בפי הבטן', 'למעלה באמצע', 'באמצע למעלה', 'בטן עליונה', 'בבטן העליונה'], llq: ['שמאל למטה', 'למטה משמאל'], diffuse: ['בכל הבטן', 'כל הבטן', 'מפושט'] },
   onset: { hour: ['לפני שעה', 'חצי שעה', 'לפני כמה דקות', 'ממש עכשיו', 'השעה האחרונה'], today: ['היום', 'הבוקר', 'מהבוקר', 'מאז הבוקר', 'הערב', 'הצהריים', 'לפני כמה שעות', 'שעתיים', 'שלוש שעות'], days: ['אתמול', 'מאתמול', 'יומיים', 'שלושה ימים', 'שלוש ימים', 'כמה ימים', 'שלשום'], week: ['שבוע', 'שבועיים', 'עשרה ימים'], month: ['חודש', 'חודשים', 'שנה', 'שנים', 'הרבה זמן', 'תקופה ארוכה'] },
-  fever_temp: {}
+  fever_temp: {},
+  // structured anamnesis (HPI / social)
+  hpi_location: { arm_r: ['יד ימין', 'ביד ימין', 'כתף ימין', 'זרוע ימין', 'ביד הימנית'], arm_l: ['יד שמאל', 'ביד שמאל', 'כתף שמאל', 'זרוע שמאל', 'ביד השמאלית'], leg_r: ['רגל ימין', 'ברגל ימין', 'ברך ימין', 'קרסול ימין', 'ברגל הימנית'], leg_l: ['רגל שמאל', 'ברגל שמאל', 'ברך שמאל', 'קרסול שמאל', 'ברגל השמאלית'], abd_upper: ['בטן עליונה', 'פי הבטן', 'למעלה בבטן', 'קיבה'], abd_lower: ['בטן תחתונה', 'למטה בבטן'], pelvis: ['מפשעה', 'אגן'], back: ['גב', 'מותניים'], chest: ['חזה', 'צלעות'], neck: ['צוואר', 'גרון'], head: ['ראש', 'מצח', 'רקה', 'רקות'], arm: ['יד', 'זרוע', 'כתף', 'מרפק', 'שורש כף היד', 'אצבע'], leg: ['רגל', 'ברך', 'קרסול', 'ירך', 'כף רגל'], skin: ['כל הגוף', 'בכל הגוף', 'מפושט'] },
+  hpi_character: { pressing: ['לוחץ', 'לוחצת', 'לחץ', 'מועקה', 'כבדות'], sharp: ['דוקר', 'דוקרת', 'חד', 'דקירות', 'דקירה'], burning: ['שורף', 'שורפת', 'צורב', 'צורבת', 'צריבה', 'שריפה'], throbbing: ['פועם', 'פועמת', 'דופק', 'דפיקות'], dull: ['עמום', 'עמומה', 'מציק', 'מציקה'], cramping: ['התכווצויות', 'עוויתות', 'בגלים', 'כמו מחזור'] },
+  hpi_timing: { worsening: ['מחמיר', 'מחמירה', 'הולך ומחמיר', 'יותר ויותר'], improving: ['משתפר', 'משתפרת', 'פחות ופחות'], intermittent: ['בא והולך', 'באה והולכת', 'מדי פעם', 'לפעמים', 'בהתקפים', 'התקפים', 'בגלים'], constant: ['כל הזמן', 'קבוע', 'קבועה', 'רציף', 'רצוף', 'לא עובר', 'לא עוברת'] },
+  soc_smoking: { current: ['מעשן', 'מעשנת', 'סיגריות', 'קופסה', 'נרגילה', 'סיגריה'], past: ['עישנתי', 'הפסקתי', 'בעבר', 'פעם עישנתי'], never: ['לא מעשן', 'לא מעשנת', 'אף פעם', 'בכלל לא', 'לא'] },
+  soc_alcohol: { daily: ['כל יום', 'יומיומי', 'כל ערב', 'הרבה'], social: ['לפעמים', 'מדי פעם', 'באירועים', 'בשבת', 'כוס יין', 'קצת', 'בירה'], none: ['לא שותה', 'לא', 'בכלל לא', 'אף פעם'] }
 };
 const HEB_NUM = { 'אפס': 0, 'אחת': 1, 'אחד': 1, 'שתיים': 2, 'שתים': 2, 'שניים': 2, 'שנים': 2, 'שתי': 2, 'שלוש': 3, 'שלושה': 3, 'ארבע': 4, 'ארבעה': 4, 'חמש': 5, 'חמישה': 5, 'שש': 6, 'שישה': 6, 'שבע': 7, 'שבעה': 7, 'שמונה': 8, 'תשע': 9, 'תשעה': 9, 'עשר': 10, 'עשרה': 10 };
 const YES_W = ['כן', 'בטח', 'נכון', 'אכן', 'יש', 'כמובן', 'בהחלט', 'קצת', 'מעט', 'yes', 'yeah', 'yep'];
@@ -221,6 +227,9 @@ export function extractFacts(text, ctx = {}) {
   }
   if (ctx.category === 'abdominal') { const v = pickChoice(t, CHOICE_LEX.abd_location); if (v) { facts.abd_location = v; evidence.abd_location = v; } }
   const on = pickChoice(t, CHOICE_LEX.onset); if (on) { facts.onset = on; evidence.onset = on; }
+  for (const id of ['hpi_character', 'hpi_timing']) { const v = pickChoice(t, CHOICE_LEX[id]); if (v) { facts[id] = v; evidence[id] = v; } }
+  if (ctx.category && ctx.category !== 'abdominal') { const lx = { ...CHOICE_LEX.hpi_location }; delete lx.skin; const v = pickChoice(t, lx); if (v) { facts.hpi_location = v; evidence.hpi_location = v; } }
+  if (/(מעשן|מעשנת|עישנתי)/.test(t)) { const v = pickChoice(t, CHOICE_LEX.soc_smoking); if (v) { facts.soc_smoking = v; evidence.soc_smoking = v; } }
   const sev = parseSeverity(t); if (sev !== undefined && /(כאב|כואב|חזק|נסבל|מתוך|\/10|קל|בינוני|נורא)/.test(t)) { facts.severity = sev; evidence.severity = String(sev); }
   if (ctx.category === 'fever' || /חום/.test(t)) { const temp = parseTemperature(t); if (temp && temp !== 'unknown') { facts.fever_temp = temp; evidence.fever_temp = temp; } }
   // medications / allergies
@@ -255,8 +264,45 @@ export function parseChoice(text, q) {
 }
 export function parseMulti(text, q) {
   const t = norm(text);
-  if (/(אף אחד|כלום|אין|לא|שום דבר|none)(?=$|\s|[,.])/.test(t) && !(MULTI_LEX[q.id] && pickMulti(t, MULTI_LEX[q.id]).length)) return [];
+  if (/(אף אחד|כלום|אין|לא|שום דבר|none)(?=$|\s|[,.])/.test(t) && !(MULTI_LEX[q.id] && pickMulti(t, MULTI_LEX[q.id]).length) && !(q.options || []).some(o => o.kw && (r => r.found && !r.negated)(mention(t, o.kw)))) return [];
   const v = new Set(MULTI_LEX[q.id] ? pickMulti(t, MULTI_LEX[q.id]) : []);
-  (q.options || []).forEach(o => { if (o.v !== 'none' && t.includes(norm(o.label))) v.add(o.v); });
+  (q.options || []).forEach(o => { if (!o.kw && o.v !== 'none' && t.includes(norm(o.label))) v.add(o.v); });
+  (q.options || []).forEach(o => { if (o.kw) { const r = mention(t, o.kw); if (r.found && !r.negated) v.add(o.v); } });
   return [...v];
+}
+
+// ---------------------------------------------------------------- free-speech intents (hands-free voice loop)
+const INTENTS = [
+  ['repeat', /(תחזר[יו]?|לחזור על|חזרי על|תגיד[י]? שוב|שוב את השאלה|מה שאלת|לא שמעתי|לא הבנתי את השאלה|אפשר לחזור|סליחה\s*\?|^מה\s*\??$|^סליחה מה|^מה אמרת|repeat|say again|pardon)/],
+  ['hold', /^(רגע|שניה|שנייה|חכי|חכה|רק רגע|תני לי רגע|תן לי רגע|hold on|wait)(?=$|[\s,.!])/],
+  ['end', /(אני רוצה לסיים|לסיים את השיחה|בוא נסיים|בואי נסיים|תסיימי|end the call|stop the call)/],
+  ['unknown', /(לא יודע|לא יודעת|לא בטוח|לא בטוחה|אין לי מושג|לא זוכר|לא זוכרת|קשה לי להגיד|i don't know|not sure)/]
+];
+const CORRECTION = /^(?:רגע[, ]+)?(?:לא[, ]+)?(?:בעצם|טעיתי|תיקון|התכוונתי|סליחה טעיתי|אני מתקן|אני מתקנת|actually|i meant)[,:\s]*/;
+/**
+ * Classify a free-speech utterance that is not (only) an answer.
+ * Returns { intent: 'repeat'|'hold'|'end'|'unknown'|'correction'|'question'|null, rest }.
+ */
+export function detectIntent(text) {
+  const t = norm(text);
+  if (!t) return { intent: null, rest: '' };
+  const c = t.match(CORRECTION);
+  if (c && c[0].trim() && /(בעצם|טעיתי|תיקון|התכוונתי|מתקנ|actually|meant)/.test(c[0])) return { intent: 'correction', rest: t.slice(c[0].length).trim() };
+  for (const [name, re] of INTENTS) if (re.test(t)) {
+    // "לא יודע" inside a longer, informative sentence is not an "I don't know" answer
+    if (name === 'unknown' && t.split(' ').length > 7) continue;
+    return { intent: name, rest: t };
+  }
+  if (/\?$/.test(String(text).trim()) || /^(למה|מה זה|האם זה|זה מסוכן|זה רציני|מה אני צריך|מה אני צריכה|כמה זמן|איך)\b/.test(t)) return { intent: 'question', rest: t };
+  return { intent: null, rest: t };
+}
+/** All categories mentioned (negation-aware), ranked by hits then earliest position — for multi-symptom sentences. */
+export function classifyAll(text, categories) {
+  const t = norm(text).replace(/(^|\s)(אף|שום)\s+(פעם|אחד|אחת|דבר)/g, '$1לא $3'); const out = [];
+  for (const [id, c] of Object.entries(categories)) {
+    let n = 0, pos = Infinity;
+    for (const k of c.keywords || []) for (const i of positions(t, k)) { if (isNegated(t, i)) continue; n++; pos = Math.min(pos, i); }
+    if (n) out.push({ id, n, pos });
+  }
+  return out.sort((a, b) => b.n - a.n || a.pos - b.pos).map(x => x.id);
 }

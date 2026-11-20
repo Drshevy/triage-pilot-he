@@ -133,8 +133,11 @@ export class Speaker extends EventTarget {
     this.stats.engineUsed = engine;
     sink.onStart?.();
     const chunks = chunkText(text);
-    let prefetch = null;
+    let prefetch = null, offset = 0;
+    const outer = sink;
     for (let i = 0; i < chunks.length && !run.cancelled; i++) {
+      const off = offset; offset += chunks[i].split(/\s+/).filter(Boolean).length;
+      sink = { ...outer, onWord: wi => outer.onWord?.(off + wi) };          // word index across the whole text (visual sync)
       if (engine === 'neural') {
         const cur = prefetch || this._synth(chunks[i]);
         prefetch = i + 1 < chunks.length ? this._synth(chunks[i + 1]) : null;
@@ -149,7 +152,7 @@ export class Speaker extends EventTarget {
         }
       } else await this._playEstimate(chunks[i], run, sink);
     }
-    sink.onFrame({}, { energy: 0 }); sink.onEnd?.();
+    sink = outer; sink.onFrame({}, { energy: 0 }); sink.onEnd?.();
     if (this.active === run) this.active = null;
   }
   _synth(text) { return loadNeural().then(() => synthesize(text, this.rate)); }

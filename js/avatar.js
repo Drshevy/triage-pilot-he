@@ -9,6 +9,7 @@
 //    canvas jaw/mouth warp driven by the same viseme timeline.
 //  * StreamingAvatarProvider: documented stub for photoreal paid streaming avatars (HeyGen / Simli / D-ID). Not active.
 import { Speaker } from './speaker.js';
+let IndicatorCtor = null; export const registerIndicator = C => { IndicatorCtor = C; };
 import { VISEMES, opennessOf, roundnessOf } from './visemes.js';
 
 const abs = p => new URL(p, document.baseURI).href;
@@ -47,10 +48,12 @@ export const isMobile = () => matchMedia('(pointer: coarse)').matches || innerWi
  */
 export function createAvatar(settings) {
   const speaker = Speaker.shared({ ttsEnabled: settings.tts, engine: voiceParam() || settings.ttsEngine || 'auto' });
+  // Conversation-first: the default is a simple voice indicator (no face). Portrait / 3D remain opt-in for demos only.
   const forced = new URLSearchParams(location.search).get('avatar');
-  const mode = forced || settings.avatarMode || 'auto';
+  const mode = forced || 'indicator';
   if (mode === '3d' && hasWebGL()) return new Avatar3DProvider({ speaker });
-  return new PortraitAvatarProvider({ speaker, reason: mode === '3d' ? 'WebGL אינו זמין' : '' });
+  if (mode === 'portrait' || mode === '3d') return new PortraitAvatarProvider({ speaker, reason: mode === '3d' ? 'WebGL אינו זמין' : '' });
+  return new IndicatorCtor({ speaker });
 }
 /** ?voice=native|neural|none (diagnostics/tests). */
 export const voiceParam = () => { const v = new URLSearchParams(location.search).get('voice'); return ['native', 'neural', 'none', 'auto'].includes(v) ? v : null; };
@@ -423,4 +426,15 @@ export class StreamingAvatarProvider extends AvatarProvider {
   mount(el) { el.innerHTML = '<video autoplay playsinline class="avatar-stream"></video><p class="muted">Streaming avatar not configured</p>'; }
   async speak() { throw new Error('StreamingAvatarProvider not configured in the prototype'); }
   setState() {}
+}
+
+/** HeyGen Interactive Avatar — STUB. Needs the user's approval + a backend-issued session token. No calls are made. */
+export class HeyGenStreamingAvatar extends StreamingAvatarProvider {
+  constructor(opts = {}) { super(opts); this.vendor = 'heygen'; }
+  async speak() { throw new Error('HeyGenStreamingAvatar not configured: needs approval + API key (server-side)'); }
+}
+/** Simli real-time avatar — STUB. Needs the user's approval + API key held server-side. No calls are made. */
+export class SimliStreamingAvatar extends StreamingAvatarProvider {
+  constructor(opts = {}) { super(opts); this.vendor = 'simli'; }
+  async speak() { throw new Error('SimliStreamingAvatar not configured: needs approval + API key (server-side)'); }
 }

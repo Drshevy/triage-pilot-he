@@ -1,3 +1,4 @@
+import { buildAnamnesis, anamnesisText } from './anamnesis.js';
 // Builds the clinician-facing summary (not a diagnosis) and renders it in Hebrew.
 import { computeUrgency, rankDifferentials, considerations, redFlagStatus, validate } from './engine.js';
 import { esc, fmtDate, fmtDur } from './util.js';
@@ -30,6 +31,18 @@ const REC_LBL = { recent: '≤30 יום', months: '1–6 חודשים', old: 'מ
 const REL_LBL = { high: 'גבוהה', medium: 'בינונית', low: 'נמוכה' };
 const src = (rules, s) => `<span class="cite" title="${esc(rules.sources[s] || 'מקור לא ידוע')}">[${esc(s)}]</span>`;
 
+function anamnesisHTML(a) {
+  const nn = v => (v == null ? '<span class="muted">לא נשאל</span>' : esc(v));
+  return `<table class="qa anamnesis" id="anamnesis"><tbody>
+    <tr><th scope="row">מחלה נוכחית (HPI)</th><td><ul class="hpi">${a.hpi.map(([k, v]) => `<li><b>${esc(k)}:</b> ${nn(v)}</li>`).join('')}</ul></td></tr>
+    <tr><th scope="row">סקירת מערכות (ROS)</th><td>${a.ros ? `תסמינים נלווים: ${esc(a.ros.positive)}` : nn(null)}</td></tr>
+    <tr><th scope="row">מחלות רקע</th><td>${nn(a.pmh)}</td></tr><tr><th scope="row">תרופות</th><td>${nn(a.meds)}</td></tr><tr><th scope="row">רגישויות</th><td>${nn(a.allergies)}</td></tr>
+    <tr><th scope="row">היסטוריה חברתית</th><td>${a.social.length ? a.social.map(([k, v]) => `${esc(k)}: ${esc(v)}`).join(' · ') : nn(null)}</td></tr>
+    <tr><th scope="row">היסטוריה משפחתית</th><td>${a.family == null ? '<span class="muted">לא רלוונטי לתלונה / לא נשאל</span>' : esc(a.family)}</td></tr>
+    ${a.corrections ? `<tr><th scope="row">תיקונים</th><td>המטופל/ת תיקן/ה ${a.corrections} תשובות במהלך השיחה</td></tr>` : ''}
+    ${a.patientQuestions.length ? `<tr><th scope="row">שאלות המטופל/ת</th><td>${a.patientQuestions.map(q => esc(q.text || q)).join(' · ')}</td></tr>` : ''}
+  </tbody></table>`;
+}
 export function renderSummary(rules, c, { staff = false } = {}) {
   const s = c.summary; if (!s) return '<p>אין סיכום עדיין.</p>';
   const v = s.validation; const p = c.patient;
@@ -79,7 +92,8 @@ export function renderSummary(rules, c, { staff = false } = {}) {
 
     <section><h3>תלונה עיקרית ואנמנזה</h3>
       <p><b>תלונה:</b> ${esc(c.facts.complaint_text || s.categoryLabel)} · <b>תחום:</b> ${esc(s.categoryLabel)} (${esc(s.specialty)})</p>
-      <table class="qa"><tbody>${qa}</tbody></table>
+      ${anamnesisHTML(buildAnamnesis(c, rules))}
+      <details><summary>כל השאלות והתשובות (${(c.answered || []).length})</summary><table class="qa"><tbody>${qa}</tbody></table></details>
     </section>
 
     <section><h3>דגלים אדומים שנבדקו</h3><ul class="rf-list">${rf}</ul></section>
@@ -144,6 +158,7 @@ export function summaryText(rules, c) {
   L.push(`מטופל/ת: ${p.name}, גיל ${p.age}, ${SEX[p.sex] || p.sex} | ${fmtDate(c.createdAt)}`);
   L.push(`דחיפות: ${s.urgency.label} (כלל ${s.urgency.decidingRule}) | ביטחון ${Math.round(s.validation.confidence * 100)}% | דורש בדיקת קלינאי`);
   L.push(`תלונה: ${c.facts.complaint_text} | תחום: ${s.categoryLabel}`);
+  L.push(anamnesisText(buildAnamnesis(c, rules)));
   for (const id of c.answered || []) if (c.questions?.[id]) L.push(`- ${c.questions[id]} → ${c.labels[id]}`);
   L.push('דגלים אדומים: ' + s.redFlags.filter(r => r.status !== 'not-assessed').map(r => `${r.label}: ${r.status}`).join('; '));
   for (const cl of c.media?.clips || []) L.push(cl.status === 'ok' ? `צילום ${cl.label}: צורף` : `צילום ${cl.label}: העברת מידע נכשלה (${cl.reason})`);

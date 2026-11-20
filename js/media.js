@@ -6,10 +6,16 @@ function pickMime() {
 export class MediaSession {
   constructor() { this.stream = null; this.rec = null; this.chunks = []; this.startedAt = 0; this.error = null; }
   static isSupported() { return !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder); }
-  async start() {
+  /** Request camera+mic NOW (call inside the user's tap on iOS); MediaSession.start() can then reuse the promise. */
+  static request() {
+    if (!MediaSession.isSupported()) return null;
+    const p = navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    p.catch(() => {}); return p;
+  }
+  async start(pending = null) {
     if (!MediaSession.isSupported()) { this.error = 'הדפדפן אינו תומך בהקלטת וידאו (נדרש HTTPS ודפדפן עדכני)'; return false; }
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: true });
+      this.stream = await (pending || MediaSession.request());
     } catch (e) {
       this.error = e.name === 'NotAllowedError' ? 'לא ניתנה הרשאה למצלמה/מיקרופון' : `שגיאת מצלמה: ${e.name || e.message}`;
       return false;
@@ -33,9 +39,9 @@ export class MediaSession {
     return { blob, duration };
   }
   /** Record a short clip from the same stream. Returns { stop(), done: Promise<{blob,duration}> }. */
-  recordClip(maxSec, onTick) {
-    if (!this.stream) throw new Error('המצלמה אינה פעילה');
-    const chunks = []; const r = new MediaRecorder(this.stream, this.mime ? { mimeType: this.mime } : undefined);
+  recordClip(maxSec, onTick, stream = this.stream) {
+    if (!stream) throw new Error('המצלמה אינה פעילה');
+    const chunks = []; const r = new MediaRecorder(stream, stream === this.stream && this.mime ? { mimeType: this.mime } : undefined);
     const t0 = Date.now(); let timer;
     const done = new Promise((resolve, reject) => {
       r.ondataavailable = e => e.data.size && chunks.push(e.data);

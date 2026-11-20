@@ -1,13 +1,17 @@
 // App shell: router, patient flow (onboarding → consent → AI session → summary), staff routes.
 import { $, $$, esc, uid, toast, fmtDur, getSettings, loadRules } from './util.js';
 import { EncryptedIndexedDBStorage } from './storage.js';
-import { createAvatar } from './avatar.js';
+import { createAvatar, registerIndicator } from './avatar.js';
+import { VoiceIndicatorProvider } from './voice-indicator.js';
+import { VisualPanel } from './visuals.js';
+registerIndicator(VoiceIndicatorProvider);
 import { ConversationalDialogue } from './dialogue.js';
 import { VoiceController } from './voice.js';
 import { Speaker, isIOS } from './speaker.js';
 import { buildAssessment } from './assessment.js';
 import { voiceParam } from './avatar.js';
 import { MediaSession } from './media.js';
+import { detectIntent } from './nlu.js';
 import { SpeechInput } from './speech.js';
 import { NullKnowledgeProvider } from './knowledge.js';
 import { buildSummary, renderSummary, summaryText } from './summary.js';
@@ -21,8 +25,8 @@ export const ctx = {
   settings: getSettings(),
   storage: new EncryptedIndexedDBStorage(),     // StorageProvider
   knowledge: new NullKnowledgeProvider(),       // KnowledgeProvider
-  makeAvatar: s => createAvatar(s),             // AvatarProvider (animated portrait default; 3D TalkingHead opt-in)
-  makeDialogue: (rules, patient) => new ConversationalDialogue(rules, patient),                    // DialogueProvider (free-text conversation)
+  makeAvatar: s => createAvatar(s),             // AvatarProvider (portrait default; 3D opt-in). Later: HeyGenStreamingAvatar / SimliStreamingAvatar (avatar.js stubs; need approval + key)
+  makeDialogue: (rules, patient) => new ConversationalDialogue(rules, patient),  // DialogueProvider. Later: LLMDialogueProvider (llm-dialogue.js stub; needs approval + key)
   rules: null
 };
 window.__triage = ctx; // for debugging/tests only
@@ -173,8 +177,8 @@ function renderConsent() {
     <label class="check"><input type="checkbox" name="c" id="c-data"><span><b>שימוש במידע:</b> התשובות, ההקלטות והמסמכים יישמרו מוצפנים במכשיר זה בלבד וישמשו להכנת סיכום לרופא/ה שציינתי ולהערכת הפיילוט (נתונים מצטברים). ניתן למחוק בכל עת.</span></label>
     <label class="check"><input type="checkbox" name="c" id="c-emerg"><span><b>לא לחירום:</b> הבנתי שזה אינו שירות חירום ושבמצב חירום יש לחייג 101.</span></label>
     <label class="check"><input type="checkbox" name="c" id="c-ai"><span><b>בינה מלאכותית, לא רופא/ה:</b> הבנתי שנועה היא עוזרת דיגיטלית (אווטאר ממוחשב), שאינה מאבחנת ואינה נותנת טיפול, ושהסיכום ייבדק על ידי רופא/ה.</span></label>
-    <fieldset class="voice-consent"><legend>אופציונלי</legend>
-    <label class="check"><input type="checkbox" id="c-voice" ${VoiceController.isSupported() ? '' : 'disabled'}><span><b>📞 שיחה קולית (כמו שיחת טלפון):</b> נועה מדברת ומקשיבה, ואין צורך להקליד. <b>שימו לב:</b> בדפדפן Chrome הדיבור שלך נשלח לשרתי Google לצורך זיהוי דיבור; ב-Safari נעשה העיבוד ע״י Apple, במכשיר או בשרתי Apple. ההקלטה של השיחה עצמה נשמרת רק במכשיר, מוצפנת.</span></label>
+    <fieldset class="voice-consent"><legend>אופן השיחה</legend>
+    <label class="check"><input type="checkbox" id="c-voice" ${VoiceController.isSupported() ? 'checked' : 'disabled'}><span><b>📞 שיחה קולית חופשית (כמו שיחת טלפון, ברירת מחדל):</b> מדברים עם נועה בחופשיות, בלי כפתורים ובלי הקלדה. אפשר לקטוע אותה, לבקש שתחזור על השאלה, לומר "רגע", "לא יודע/ת" או "בעצם…" כדי לתקן. אפשר לבטל את הסימון ולהקליד במקום. <b>שימו לב:</b> בדפדפן Chrome הדיבור שלך נשלח לשרתי Google לצורך זיהוי דיבור; ב-Safari נעשה העיבוד ע״י Apple, במכשיר או בשרתי Apple. ההקלטה של השיחה עצמה נשמרת רק במכשיר, מוצפנת.</span></label>
     ${VoiceController.isSupported() ? '' : '<p class="muted" id="voice-unsupported">זיהוי דיבור אינו נתמך בדפדפן הזה, ולכן השיחה תתנהל בהקלדה. נועה עדיין תדבר בקול.</p>'}
     ${soundUI()}</fieldset>
     <div class="row" style="margin-top:8px"><button class="btn btn-primary" type="submit" id="agree" disabled>אני מסכים/ה — התחלת שיחה</button><a class="btn btn-ghost" href="#/intake">חזרה</a></div></form>`;
@@ -183,8 +187,11 @@ function renderConsent() {
   wireSoundUI();
   $('#consent').onsubmit = e => {
     e.preventDefault();
-    speaker().unlock();                                   // user gesture → unlock audio before the session starts speaking
+    // THE one tap: unlock TTS audio, the VAD AudioContext and request camera+mic inside the gesture (iOS needs this)
+    speaker().unlock();
     const voice = !!$('#c-voice')?.checked;
+    if (voice) VoiceController.unlock();
+    draft.streamP = MediaSession.request();
     draft.consent = { video: true, data: true, emergency: true, ai: true, voice, at: Date.now(), version: 'consent-v2' };
     draft.voiceMode = voice; location.hash = '#/session';
   };
@@ -206,8 +213,8 @@ async function startSession() {
   <div class="session">
     <aside class="card side">
       <div id="avatar-host"></div>
-      <div class="avatar-name">נועה</div><div class="avatar-sub">עוזרת טריאז' דיגיטלית · אווטאר ממוחשב</div>
-      ${soundUI()}
+      <div class="avatar-name">נועה</div><div class="avatar-sub">עוזרת טריאז' דיגיטלית · קול ממוחשב</div>
+      ${S.voiceMode ? '<div class="voice-engine"><span class="ve-label" id="ve-label"></span></div>' : soundUI()}
       <div class="caption" id="caption" aria-live="polite"></div>
       <div class="selfview ${S.preview ? '' : 'hidden-preview'}" id="selfview"><span class="rec" id="rec" hidden>מקליט <span id="rec-t">0:00</span></span><video id="preview" muted playsinline autoplay></video></div>
       <div class="row" style="margin-top:8px;justify-content:space-between">
@@ -217,28 +224,26 @@ async function startSession() {
       <p class="muted" id="media-status" style="font-size:13px"></p>
     </aside>
     <section class="card">
-      <div class="row" style="justify-content:space-between"><h2>שיחת טריאז'</h2><button class="btn btn-ghost btn-sm" id="end-early">סיום מוקדם</button></div>
+      <div class="row" style="justify-content:space-between"><h2>שיחת טריאז'</h2>${S.voiceMode ? '' : '<button class="btn btn-ghost btn-sm" id="end-early">סיום מוקדם</button>'}</div>
+      <div class="visual-panel" id="visual" hidden></div>
       <div class="chat" id="chat" role="log" aria-live="polite"></div>
       ${S.voiceMode ? `<div class="voice-panel" id="voice-panel">
-        <div class="voice-status" id="voice-status" aria-live="polite">מוכנים? לחצו כדי להתחיל לדבר עם נועה</div>
+        <div class="voice-status" id="voice-status" aria-live="polite">📞 מתחברת…</div>
+        <div class="mic-row"><div class="mic-level" id="mic-level" aria-hidden="true"><i></i></div></div>
         <div class="interim" id="interim" aria-live="polite"></div>
-        <div class="voice-bar">
-          <button class="btn btn-primary voice-call-start" id="voice-start">📞 התחלת שיחה קולית</button>
-          <div class="mic-level" id="mic-level" title="עוצמת מיקרופון" aria-hidden="true"><i></i></div>
-          <button class="btn" id="voice-bargein" hidden>✋ להפסיק ולדבר</button>
-          <button class="btn" id="voice-repeat" hidden>🔁 חזרה על השאלה</button>
-          <button class="btn" id="voice-pause" hidden aria-pressed="false">⏸️ השהיה</button>
-        </div></div>
-      <details class="type-fallback" id="type-fallback"><summary>מעדיפ/ה להקליד או לבחור תשובה?</summary><div class="answer" id="answer"></div></details>` : '<div class="answer" id="answer"></div>'}
+        <p class="voice-tip muted">מדברים בחופשיות. אפשר לקטוע את נועה, לומר "תחזרי על השאלה", "רגע", "לא יודע/ת" או "בעצם…" כדי לתקן.</p></div>
+      <details class="type-fallback" id="type-fallback"><summary>מעדיפ/ה להקליד או לבחור תשובה?</summary><div class="answer" id="answer"></div>
+        <div class="row" style="margin-top:8px">${soundUI()}<button class="btn btn-ghost btn-sm" id="end-early">סיום מוקדם</button></div></details>` : '<div class="answer" id="answer"></div>'}
     </section>
   </div>`;
   S.avatar.mount($('#avatar-host'));
+  S.visual = new VisualPanel($('#visual'));
   wireSoundUI(t => S.avatar.speak(t));
   $('#toggle-preview').onchange = e => { S.preview = e.target.checked; $('#selfview').classList.toggle('hidden-preview', !S.preview); log('preview-' + (S.preview ? 'on' : 'off')); };
   $('#toggle-tts').onchange = e => { S.avatar.ttsEnabled = e.target.checked; if (!e.target.checked) S.avatar.stop(); };
   $('#end-early').onclick = async () => { if (await confirmDialog('לסיים את השיחה עכשיו? הסיכום יסומן כחלקי.', 'סיום')) finish('ended-early'); };
 
-  const ok = await S.media.start();
+  const ok = await S.media.start(draft.streamP); draft.streamP = null;
   if (ok) {
     $('#preview').srcObject = S.media.stream; $('#rec').hidden = false;
     S.recTimer = setInterval(() => { const el = $('#rec-t'); if (el) el.textContent = fmtDur((Date.now() - S.media.startedAt) / 1000); }, 1000);
@@ -249,68 +254,161 @@ async function startSession() {
   }
   await ctx.storage.saveCase(c);
   const first = await S.dialogue.start();
-  if (S.voiceMode) {
-    renderAnswer(first.question);
-    addMsg('ai', first.say); $('#caption').textContent = first.say;
-    await new Promise(res => { $('#voice-start').onclick = () => { speaker().unlock(); startVoice(); res(); }; });
-    if (!S) return;
-    S.turnTok = (S.turnTok || 0) + 1; return speakThenListen(first, S.turnTok);
-  }
+  if (S.voiceMode) { startVoice(); return showTurn(first); }   // hands-free from here on: no further taps
   showTurn(first);
 }
 
-// ---------------- voice (phone-call) mode ----------------
+// ---------------- hands-free voice loop ----------------
 function startVoice() {
-  const v = S.voice = new VoiceController({ stream: S.media.stream, silenceMs: ctx.settings.voiceSilenceMs || 1500, bargeIn: ctx.settings.voiceBargeIn !== false });
-  v.start(); log('voice-start');
-  $('#voice-start').hidden = true; ['#voice-bargein', '#voice-repeat', '#voice-pause'].forEach(id => { $(id).hidden = false; });
-  const status = { listening: '🎙️ מקשיבה… אפשר לדבר', hearing: '🎙️ שומעת…', thinking: '💭 רגע…', speaking: '🗣️ נועה מדברת', paused: '⏸️ מושהה', idle: '', error: '⚠️ אין גישה למיקרופון לזיהוי דיבור, אפשר להקליד' };
+  const st = ctx.settings;
+  const v = S.voice = new VoiceController({ stream: S.media.stream, silenceMs: st.voiceSilenceMs || 1300, longSilenceMs: st.voiceLongSilenceMs || 12000, bargeIn: st.voiceBargeIn !== false });
+  v.start(); ctx.voiceStats = v.stats; log('voice-start', { vad: v.hasVAD });
+  const label = { listening: '🎙️ מקשיבה…', hearing: '🎙️ שומעת…', thinking: '💭 רגע…', speaking: '🗣️ נועה מדברת (אפשר לקטוע)', paused: '⏸️ מושהה', idle: '', error: '⚠️ אין גישה למיקרופון' };
   v.addEventListener('state', e => {
-    const st = e.detail.state; const el = $('#voice-status'); if (el) el.textContent = status[st] ?? '';
-    if (st === 'listening' && S?.avatar.state !== 'alert') S.avatar.setState('listening');
-    if (st === 'error') { const d = $('#type-fallback'); if (d) d.open = true; }
+    const s = e.detail.state; const el = $('#voice-status'); if (el) el.textContent = label[s] ?? '';
+    if ((s === 'listening' || s === 'hearing') && S?.avatar.state !== 'alert') S.avatar.setState('listening');
+    if (s === 'error') needTap('mic');
   });
   v.addEventListener('interim', e => { const el = $('#interim'); if (el) el.textContent = e.detail.text; const t = $('#typed'); if (t) t.value = e.detail.text; });
-  v.addEventListener('level', e => { const i = $('#mic-level i'); if (i) i.style.width = `${Math.round(e.detail.level * 100)}%`; });
-  v.addEventListener('nospeech', () => { const el = $('#voice-status'); if (el) el.textContent = '🎙️ לא שמעתי. אפשר לדבר, או ללחוץ "חזרה על השאלה"'; });
-  v.addEventListener('bargein', () => { if (!S) return; log('voice-barge-in'); S.turnTok++; S.avatar.stop(); v.listen(); });
-  v.addEventListener('final', e => { const el = $('#interim'); if (el) el.textContent = ''; voiceAnswer(e.detail.text); });
-  $('#voice-bargein').onclick = () => v.bargeIn();
-  $('#voice-repeat').onclick = () => { if (!S?.lastTurn) return; v.stopListening(); S.turnTok++; speakThenListen({ ...S.lastTurn, say: S.lastTurn.question?.say || S.lastTurn.question?.text || S.lastTurn.say }, S.turnTok); };
-  $('#voice-pause').onclick = e => {
-    const b = e.currentTarget, paused = b.getAttribute('aria-pressed') !== 'true';
-    b.setAttribute('aria-pressed', String(paused)); b.textContent = paused ? '▶️ המשך' : '⏸️ השהיה';
-    if (paused) { S.turnTok++; S.avatar.stop(); v.pause(); log('voice-pause'); }
-    else { v.resume(); v.listen(); log('voice-resume'); }
-  };
+  v.addEventListener('level', e => { const i = $('#mic-level i'); if (i) { i.style.width = `${Math.round(e.detail.level * 100)}%`; i.classList.toggle('voice', !!e.detail.voice); } });
+  v.addEventListener('bargein', e => { if (!S) return; log('voice-barge-in', { source: e.detail.source }); S.turnTok++; S.avatar.stop(); S.avatar.setState('listening'); v.listen(); });
+  v.addEventListener('final', e => { const el = $('#interim'); if (el) el.textContent = ''; log('voice-final', { chars: e.detail.text.length }); voiceAnswer(e.detail.text); });
+  v.addEventListener('longsilence', e => {
+    if (!S || S.busy || S.recordingClip || S.filmBusy || !S.lastTurn || S.lastTurn.done) return;
+    log('voice-reprompt', { n: e.detail.count });
+    const q = S.lastTurn.question; const short = q?.say || q?.text || '';
+    const say = e.detail.count >= 3 ? 'אני עדיין כאן. אם נוח יותר, אפשר גם להקליד למטה.' : `אני עדיין כאן${S.dialogue.name ? ', ' + S.dialogue.name : ''}. ${short}`;
+    if (e.detail.count >= 3) { const d = $('#type-fallback'); if (d) d.open = true; }
+    speakThenListen({ ...S.lastTurn, say, reprompt: true }, ++S.turnTok);
+  });
+  speaker().addEventListener('blocked', () => S?.voice && needTap('audio'));
+}
+/** Error path only: the browser refused audio/mic without a fresh tap → one big "tap to continue" target. */
+function needTap(kind) {
+  if (!S || $('#tap-resume')) return;
+  log('voice-need-tap', { kind });
+  const el = document.createElement('button'); el.id = 'tap-resume'; el.className = 'tap-resume';
+  el.textContent = kind === 'mic' ? '🎙️ הקישו כאן כדי לאפשר מיקרופון ולהמשיך' : '🔊 הקישו כאן כדי להמשיך את השיחה';
+  $('#voice-panel')?.prepend(el);
+  el.onclick = () => { speaker().unlock(); VoiceController.unlock(); el.remove(); if (S?.lastTurn) speakThenListen(S.lastTurn, ++S.turnTok); };
+}
+// ---------------- visual panel (synced to speech) ----------------
+function showVisual(turn) {
+  if (!S?.visual) return;
+  const v = turn.visual;
+  if (!v) { if (!turn.reprompt) S.visual.clear(); return; }
+  const q = turn.question;
+  S.visual.show(v, turn.say, { interactive: !S.voice, onPick: val => {                       // tap on the diagram answers (typed mode / optional)
+    if (!S || S.busy || !q) return;
+    if (v.kind === 'scale' && q.type === 'scale') submit({ value: val }, `${val}/10`);
+    if (v.kind === 'bodymap' && q.id === 'hpi_location') submit({ value: val }, q.options.find(o => o.v === val)?.label || val);
+    if (v.kind === 'bodymap' && q.id === 'abd_location') { const m = { abd_upper: 'epi', abd_lower: 'diffuse' }[val]; if (m) submit({ value: m }, q.options.find(o => o.v === m)?.label); }
+  } });
+  try { $('#visual').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
+  log('visual-shown', { kind: v.kind, qid: q?.id || null, highlight: v.highlight || null });
+}
+
+// ---------------- automatic camera (assistant-initiated) ----------------
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
+async function filmFailed(q, reason) {
+  if (!S) return;
+  const cat = ctx.rules.categories[S.c.facts.category];
+  S.c.media.clips.push({ id: uid('clip-'), label: cat?.label || 'אזור', prompt: q.text, status: 'failed', reason, at: Date.now(), auto: true });
+  log('information-transfer-failed', { what: 'film', reason });
+  addMsg('sys', `העברת מידע נכשלה: ${reason}`);
+  S.visual?.frameStatus?.('העברת המידע נכשלה');
+  await submit({ value: 'failed', reason }, `לא צולם — ${reason}`);
+}
+/** Noa turns the camera on herself, shows a framing guide, records a short clip + still, then continues. */
+async function autoFilm(q, tok) {
+  if (!S || S.filmBusy || S.turnTok !== tok) return;
+  S.filmBusy = true; S.recordingClip = true;
+  const secs = ctx.settings.autoClipSeconds || 6, cat = ctx.rules.categories[S.c.facts.category], label = cat?.label || 'אזור';
+  let own = null, cancelled = null;
+  S.filmCancel = reason => { cancelled = reason; S.filmCtl?.stop(); };
+  log('camera-auto-on', { qid: q.id });
+  try {
+    let stream = S.media.stream;
+    if (!stream || !stream.getVideoTracks().some(t => t.readyState === 'live')) {
+      S.visual.frameStatus('מבקשת גישה למצלמה…');
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('אין גישה למצלמה בדפדפן הזה');
+      own = stream = await withTimeout(navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }), 15000, 'לא התקבלה הרשאה למצלמה');
+    }
+    S.visual.attachStream(stream);
+    S.visual.frameStatus('כוונו את האזור לתוך המסגרת…');
+    if (S.voice) S.voice.listen();                                   // "סיימתי" / "לא נוח לי" work while filming
+    await sleep(ctx.settings.frameDelayMs ?? 1500);
+    if (cancelled) throw new Error(cancelled);
+    const ctl = S.filmCtl = S.media.recordClip(secs, sec => S?.visual.frameStatus('מצלמת…', { rec: true, sec: `${Math.ceil(secs - sec)}`, pct: Math.min(100, sec / secs * 100) }), stream);
+    const still = await snapshot(document.querySelector('#frame-video')).catch(() => null);
+    const { blob, duration } = await ctl.done;
+    if (cancelled) throw new Error(cancelled);
+    if (!blob || blob.size < 200) throw new Error('הצילום ריק');
+    const clip = { id: uid('clip-'), label, prompt: q.text, status: 'ok', blobId: uid('b-'), duration, mime: blob.type, size: blob.size, at: Date.now(), auto: true };
+    await ctx.storage.saveBlob(S.c.id, clip.blobId, blob, { kind: 'clip' });
+    if (still) { clip.stillId = uid('b-'); await ctx.storage.saveBlob(S.c.id, clip.stillId, still, { kind: 'still' }); }
+    S.c.media.clips.push(clip); log('filming-ok', { auto: true, duration: +duration.toFixed(1), still: !!still });
+    S.visual.frameStatus('✓ הצילום התקבל', { pct: 100 });
+    S.voice?.stopListening(true);
+    S.filmBusy = false; S.recordingClip = false; S.filmCtl = S.filmCancel = null;
+    await submit({ value: 'ok' }, `📹 צילום אוטומטי נשלח (${fmtDur(duration)})`);
+  } catch (e) {
+    S.voice?.stopListening(true);
+    if (S) { S.filmBusy = false; S.recordingClip = false; S.filmCtl = S.filmCancel = null; }
+    await filmFailed(q, cancelled || ('המצלמה לא הופעלה: ' + (e?.message || e)));
+  } finally { own?.getTracks().forEach(t => t.stop()); }
+}
+function snapshot(video) {
+  return new Promise((res, rej) => {
+    if (!video || !video.videoWidth) return rej(new Error('no video'));
+    const cv = document.createElement('canvas'); cv.width = video.videoWidth; cv.height = video.videoHeight;
+    cv.getContext('2d').drawImage(video, 0, 0); cv.toBlob(b => (b ? res(b) : rej(new Error('no still'))), 'image/jpeg', 0.85);
+  });
+}
+function voiceHint(turn) {
+  const q = turn.question; const f = S.c.patient.sex === 'female';
+  if (!S.voice || turn.reprompt) return '';
+  if (q?.type === 'film') return q.auto ? '' : (f ? ' כשאת מוכנה, תגידי "כן" ואתחיל לצלם.' : ' כשאתה מוכן, תגיד "כן" ואתחיל לצלם.');
+  if (q?.type === 'upload') return ' בחירת קובץ דורשת נגיעה במסך: "מעדיפ/ה להקליד" ואז "העלאת קובץ". אם אין קובץ כרגע, פשוט תגידו "אין".';
+  return '';
 }
 function speakThenListen(turn, tok) {
-  S.lastTurn = turn;
+  if (!turn.reprompt) S.lastTurn = turn;
   S.voice?.setSpeaking(true);
-  return S.avatar.speak(turn.say).then(() => {
+  return S.avatar.speak(turn.say + voiceHint(turn), { onWord: i => S?.visual?.onWord(i) }).then(() => {
     if (!S || S.turnTok !== tok) return;
     S.voice?.setSpeaking(false);
     if (turn.done || S.avatar.state === 'alert' || document.getElementById('emergency')) return;
+    if (turn.question?.type === 'film' && turn.question.auto && !turn.reprompt) return autoFilm(turn.question, tok);
     S.avatar.setState('listening');
-    if (S.voice && !S.voice.paused && !S.recordingClip) S.voice.listen();
+    if (S.voice && !S.voice.paused && !S.recordingClip) S.voice.listen({ patient: !!turn.quiet });
   });
 }
 /** Route a spoken answer to the current question (film/upload need special handling). */
 function voiceAnswer(text) {
   if (!S || S.busy) return;
   const q = S.q; const t = text.trim();
+  const intent = detectIntent(t).intent;
+  if ((q?.type === 'film' || q?.type === 'upload') && !S.recordingClip) {
+    if (intent === 'repeat') return speakThenListen({ ...S.lastTurn, say: 'בטח. ' + S.lastTurn.say }, ++S.turnTok);
+    if (intent === 'hold') return speakThenListen({ ...S.lastTurn, say: 'בטח, אני מחכה.', quiet: true, reprompt: true }, ++S.turnTok);
+  }
   const yes = /^(כן|בטח|אוקיי|אוקי|בסדר|יאללה|אפשר|מוכן|מוכנה|נכון)/.test(t), no = /(^לא|אין|לא יכול|לא יכולה|לא רוצה|סיימתי|המשך|דלג)/.test(t);
+  if (q?.type === 'film' && q.auto && !S.recordingClip) {
+    if (no) return S.filmCancel ? S.filmCancel('המטופל/ת סירב/ה לצילום') : filmFailed(q, 'המטופל/ת סירב/ה לצילום');
+    return S.voice?.listen();
+  }
   if (q?.type === 'film') {
     if (no) { const reason = /(לא נוח|מתבייש|מתביישת)/.test(t) ? 'לא נוח לי לצלם את האזור' : /(מצלמה)/.test(t) ? 'המצלמה לא עובדת / אין מצלמה' : 'האזור לא נגיש לצילום'; return $$('#cant-reasons .chip').find(b => b.dataset.r === reason)?.click() || $('#film-cant')?.click(); }
-    if (yes && $('#film-start')) { S.recordingClip = true; $('#film-start').click(); return S.avatar.speak('מצלמת. כשתסיימ' + (S.c.patient.sex === 'female' ? 'י' : '') + ', אפשר לומר "סיימתי" או ללחוץ עצירה.').then(() => S?.voice?.listen()); }
+    if (yes && $('#film-start')) { S.recordingClip = true; $('#film-start').click(); return S.avatar.speak('מצלמת. כשתסיימ' + (S.c.patient.sex === 'female' ? 'י' : '') + ', תגידו "סיימתי".').then(() => S?.voice?.listen()); }
     return speakThenListen({ say: 'אפשר לומר "כן" כדי להתחיל לצלם, או "לא יכול לצלם".', question: q }, ++S.turnTok);
   }
-  if (S.recordingClip) { if (/(סיימתי|עצור|זהו|די)/.test(t)) $('#film-stop')?.click(); else S.voice?.listen(); return; }
+  if (S.recordingClip) { if (/(סיימתי|עצור|זהו|די)/.test(t)) (S.filmCtl ? S.filmCtl.stop() : $('#film-stop')?.click()); else if (/(לא יכול|לא נוח|לא רוצה|תפסיקי)/.test(t)) S.filmCancel?.('המטופל/ת ביקש/ה להפסיק את הצילום'); else S.voice?.listen(); return; }
   if (q?.type === 'upload') {
     if (no || /סיימתי/.test(t)) return $('#up-done')?.click();
-    return speakThenListen({ say: 'כדי לבחור קובץ צריך ללחוץ על הכפתור "העלאת קובץ" במסך. כשתסיימ' + (S.c.patient.sex === 'female' ? 'י' : '') + ', אמרו "סיימתי".', question: q }, ++S.turnTok);
+    return speakThenListen({ say: 'כדי לבחור קובץ צריך לגעת במסך: "מעדיפ/ה להקליד" ואז "העלאת קובץ". כשתסיימו, תגידו "סיימתי", או "אין" אם אין קובץ.', question: q, reprompt: true }, ++S.turnTok);
   }
-  if (q?.type === 'multi' && no) return submit({ value: [], text: t }, t);
   submit({ text: t }, t);
 }
 
@@ -326,13 +424,19 @@ function syncFromDialogue() {
 }
 
 function showTurn(turn) {
+  // typed (fallback) mode films on the patient's tap; the hands-free call turns the camera on automatically
+  if (turn.question?.type === 'film' && turn.question.auto && !S.voice) turn = { ...turn, say: turn.say.replace('אני מפעילה עכשיו את המצלמה.', 'אני רוצה לבקש ממך לצלם.').replace(/ואני אצלם לבד/, 'ולחצו "התחלת צילום"'), question: { ...turn.question, auto: false } };
   addMsg('ai', turn.say);
   $('#caption').textContent = turn.say;
   const tok = S.turnTok = (S.turnTok || 0) + 1;
   if (turn.initiated) log('avatar-request', { kind: turn.initiated, qid: turn.question?.id });
+  showVisual(turn);
   if (S.voice) speakThenListen(turn, tok);
-  else S.avatar.speak(turn.say).then(() => { if (S && S.turnTok === tok && !turn.done && S.avatar.state !== 'alert') S.avatar.setState('listening'); });
-  if (turn.done) { $('#answer').innerHTML = '<p class="muted">מכינה הערכה ראשונית וסיכום…</p>'; return finish('completed'); }
+  else S.avatar.speak(turn.say, { onWord: i => S?.visual?.onWord(i) }).then(() => {
+    if (!S || S.turnTok !== tok || turn.done || S.avatar.state === 'alert') return;
+    S.avatar.setState('listening');
+  });
+  if (turn.done) { $('#answer').innerHTML = '<p class="muted">מכינה הערכה ראשונית וסיכום…</p>'; return finish(turn.status || 'completed'); }
   renderAnswer(turn.question);
 }
 
