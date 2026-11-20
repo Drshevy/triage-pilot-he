@@ -1,5 +1,6 @@
 // Deterministic rule engine: condition evaluation, red-flag detection, urgency, differential ranking,
 // and the clinical-validation layer. Every output item carries the ruleset id + source it came from.
+import { mention } from './nlu.js';
 
 export function evalCond(c, facts) {
   if (!c) return true;
@@ -31,7 +32,9 @@ export function detectRedFlags(rules, facts) {
   const text = norm(facts._text);
   return rules.redFlags.filter(rf => {
     const byFacts = evalCond(rf.when, facts);
-    const byText = (rf.text || []).some(k => text.includes(norm(k)));
+    // Free-text match on every utterance. Negated mentions ("אין לי כאב שמקרין ליד") don't fire, except mental-health
+    // (1201) flags, which stay deliberately over-sensitive.
+    const byText = rf.action === '1201' ? (rf.text || []).some(k => text.includes(norm(k))) : (rf.text || []).length > 0 && (() => { const r = mention(text, rf.text); return r.found && !r.negated; })();
     return byFacts || byText;
   }).map(rf => ({ id: rf.id, label: rf.label, action: rf.action, source: rf.source, byText: !evalCond(rf.when, facts) }));
 }

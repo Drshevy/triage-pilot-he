@@ -179,6 +179,11 @@ async function renderSettings() {
     <h3>חוויית מטופל</h3>
     <label class="check"><input type="checkbox" id="s-preview" ${s.selfPreview ? 'checked' : ''}><span>הצגת תצוגה עצמית כברירת מחדל (המטופל/ת יכול/ה לשנות)</span></label>
     <label class="check"><input type="checkbox" id="s-tts" ${s.tts ? 'checked' : ''}><span>קול לאווטאר (Web Speech, he-IL). מועדף קול מקומי במכשיר.</span></label>
+    <div class="field"><label for="s-engine">מנוע קול</label><select id="s-engine">
+      ${[['auto', 'אוטומטי: קול המכשיר בעברית, ואם אין, קול נוירוני מקומי'], ['native', 'קול המכשיר בלבד (Carmit באייפון/מק, Google בעברית באנדרואיד)'], ['neural', 'קול נוירוני מקומי "נועה" (Piper; הורדה חד-פעמית של כ-113MB)'], ['none', 'ללא קול (כתוביות)']].map(([v, l]) => `<option value="${v}" ${(s.ttsEngine || 'auto') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="field"><label for="s-avatar">אווטאר</label><select id="s-avatar">
+      ${[['auto', 'תמונה מונפשת (ברירת מחדל, טבעי וקל לטלפונים)'], ['3d', 'דמות תלת-ממדית (ניסיוני, כבד יותר)']].map(([v, l]) => `<option value="${v}" ${(s.avatarMode || 'auto') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <label class="check"><input type="checkbox" id="s-bargein" ${s.voiceBargeIn !== false ? 'checked' : ''}><span>שיחה קולית: אפשר לקטוע את נועה בדיבור (barge-in)</span></label>
     <label class="check"><input type="checkbox" id="s-stt" ${s.voiceInput ? 'checked' : ''}><span>קלט קולי (זיהוי דיבור). <b>אזהרה:</b> ב-Chrome השמע נשלח לשרתי Google — כבוי כברירת מחדל מטעמי פרטיות.</span></label>
     <div class="field"><label for="s-clip">אורך צילום מקסימלי (שניות)</label><input id="s-clip" type="number" min="5" max="30" value="${s.clipSeconds}"></div>
     <h3>אבטחה</h3>
@@ -192,7 +197,7 @@ async function renderSettings() {
   <div class="card"><h3>נתונים</h3><div class="row"><button class="btn" id="demo2">טעינת נתוני הדגמה</button><button class="btn btn-danger" id="wipe2">מחיקת כל הנתונים והמפתחות</button></div></div>`;
   $('#set-form').onsubmit = e => {
     e.preventDefault();
-    Object.assign(s, { routingMode: $('input[name=routing]:checked').value, selfPreview: $('#s-preview').checked, tts: $('#s-tts').checked, voiceInput: $('#s-stt').checked, clipSeconds: Math.max(5, Math.min(30, +$('#s-clip').value || 12)), staffPin: $('#s-pin').value.trim() || '1234' });
+    Object.assign(s, { routingMode: $('input[name=routing]:checked').value, selfPreview: $('#s-preview').checked, tts: $('#s-tts').checked, voiceInput: $('#s-stt').checked, ttsEngine: $('#s-engine').value, avatarMode: $('#s-avatar').value, voiceBargeIn: $('#s-bargein').checked, clipSeconds: Math.max(5, Math.min(30, +$('#s-clip').value || 12)), staffPin: $('#s-pin').value.trim() || '1234' });
     saveSettings(s); toast('ההגדרות נשמרו', 'ok');
   };
   $('#demo2').onclick = async () => { await loadDemoData(ctx); toast('נטענו 5 מקרי הדגמה', 'ok'); };

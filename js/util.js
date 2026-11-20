@@ -40,6 +40,10 @@ export const DEFAULT_SETTINGS = {
   staffPin: '1234',
   selfPreview: true,
   tts: true,
+  ttsEngine: 'auto',           // 'auto' (device Hebrew voice → on-device neural fallback) | 'native' | 'neural' | 'none'
+  avatarMode: 'auto',          // 'auto' = animated photo portrait | '3d' (TalkingHead, opt-in)
+  voiceSilenceMs: 1500,        // voice mode: silence before auto-submit
+  voiceBargeIn: true,          // voice mode: talking over the avatar interrupts it
   voiceInput: false,           // off by default: browser STT may send audio to the browser vendor's cloud
   encryptionMode: 'device',    // 'device' | 'passcode'
   clipSeconds: 12

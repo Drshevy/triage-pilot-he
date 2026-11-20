@@ -46,6 +46,10 @@ export function renderSummary(rules, c, { staff = false } = {}) {
   const dd = s.differentials.map((d, i) => `<li><b>${i + 1}. ${esc(d.name)}</b> <span class="muted">משקל יחסי ${d.weight}%</span> ${src(rules, d.source)} <code>${esc(d.id)}</code>${d.why.length ? `<br><small class="muted">על סמך: ${esc(d.why.join(', '))}</small>` : ''}</li>`).join('');
   const list = arr => arr.map(x => `<li>${esc(x.text)} ${src(rules, x.source)} <code>${esc(x.id)}</code></li>`).join('');
   const kc = v.knowledgeChecks.map(k => `<li>🔄 <b>needs up-to-date check:</b> ${esc(k.text)} — <span class="muted">${esc(k.reason)}</span></li>`).join('');
+  const asmt = c.assessment ? `<section class="assessment-section"><h3>הערכה ראשונית שנמסרה למטופל/ת (AI)</h3>
+    <p class="muted" style="font-size:13px">${esc(c.assessment.disclaimer)} השיחה נוהלה ${c.voiceMode ? 'בקול (מצב שיחה קולית)' : 'בהקלדה/בחירה'}${p.preferredName ? `; פנייה בשם "${esc(p.preferredName)}"` : ''}.</p>
+    <p><b>אבחנה משוערת:</b> ${esc(c.assessment.dx.map(d => d.name).join(' · ') || '—')} ${c.assessment.dx.map(d => `<code>${esc(d.id)}</code>`).join(' ')}</p>
+    <p><b>טיפול משוער:</b> ${esc([...c.assessment.treatment.map(t => t.text), c.assessment.advice].join('; '))}</p></section>` : '';
   return `
   <article class="summary" dir="rtl">
     <header class="summary-head">
@@ -60,6 +64,7 @@ export function renderSummary(rules, c, { staff = false } = {}) {
         ${v.lowConfidence ? '<span class="badge b-low">מקרה חסר / ביטחון נמוך</span>' : ''}
       </div>
     </header>
+    ${asmt}
     <p class="disclaimer">⚠️ זהו סיכום שנוצר אוטומטית במסגרת פיילוט. <b>אינו אבחנה רפואית</b> ואינו מחליף שיקול דעת קליני. כל ההמלצות הן נקודות לשיקול בלבד, ממופות לכללים בסט כללים זמני (${esc(v.rulesetVersion)}) שטרם אושר קלינית.</p>
 
     <section><h3>פרטי המטופל/ת</h3>
@@ -144,6 +149,7 @@ export function summaryText(rules, c) {
   for (const cl of c.media?.clips || []) L.push(cl.status === 'ok' ? `צילום ${cl.label}: צורף` : `צילום ${cl.label}: העברת מידע נכשלה (${cl.reason})`);
   for (const u of c.uploads || []) for (const r of u.parsed?.results || []) L.push(`מעבדה ${r.name}: ${r.qualitative || r.value} ${r.unit || ''} [${r.status}] ${r.date || ''}`);
   L.push('אבחנה מבדלת לשיקול: ' + s.differentials.map(d => d.name).join(' > '));
+  if (c.assessment) L.push('הערכה ראשונית שנמסרה למטופל/ת (AI, לא אבחנה): ' + c.assessment.text.replace(/\n/g, ' | '));
   L.push(`סט כללים ${s.validation.rulesetVersion} — טרם אושר קלינית.`);
   return L.join('\n');
 }

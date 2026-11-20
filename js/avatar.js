@@ -12,7 +12,16 @@ import { Speaker } from './speaker.js';
 import { VISEMES, opennessOf, roundnessOf } from './visemes.js';
 
 const abs = p => new URL(p, document.baseURI).href;
-const VISEME_GAIN = 0.8;                              // conversational (not exaggerated) mouth shapes
+const VISEME_GAIN = 0.58;                             // conversational (not exaggerated) mouth shapes
+const CAM_DIST = 0.36;                                // closer head-and-shoulders framing
+/** Damped nod spring (≈1.6 Hz, ζ≈0.6), sub-stepped for stability; impulses add velocity. p peaks ≈1 for v=0.01. */
+function stepSpring(N, dt) {
+  for (let left = Math.min(dt, 100); left > 0; left -= 4) {
+    const h = Math.min(4, left); const a = -1e-4 * N.p - 0.012 * N.v; N.v += a * h; N.p += N.v * h;
+  }
+  if (!Number.isFinite(N.p) || !Number.isFinite(N.v)) { N.p = 0; N.v = 0; }
+  return N.p;
+}
 const STATE_LABEL = { idle: '', speaking: 'מדברת…', listening: 'מקשיבה…', alert: 'התרעה' };
 
 /** @interface */
@@ -31,14 +40,20 @@ export function hasWebGL() {
 }
 export const isMobile = () => matchMedia('(pointer: coarse)').matches || innerWidth < 768;
 
-/** Factory used by app.js. settings.avatarMode: 'auto' | '3d' | 'portrait'. URL ?avatar=portrait forces fallback. */
+/**
+ * Factory used by app.js. settings.avatarMode: 'auto' | 'portrait' | '3d'. URL ?avatar=3d|portrait overrides.
+ * 'auto' = the animated photo portrait: it looked more natural than the CG 3D head in side-by-side frame sequences,
+ * and it is light enough for older iPhones. The 3D head is opt-in (settings → "אווטאר תלת-ממדי").
+ */
 export function createAvatar(settings) {
-  const speaker = new Speaker({ ttsEnabled: settings.tts });
+  const speaker = Speaker.shared({ ttsEnabled: settings.tts, engine: voiceParam() || settings.ttsEngine || 'auto' });
   const forced = new URLSearchParams(location.search).get('avatar');
   const mode = forced || settings.avatarMode || 'auto';
-  if (mode !== 'portrait' && hasWebGL()) return new Avatar3DProvider({ speaker });
-  return new PortraitAvatarProvider({ speaker, reason: mode === 'portrait' ? 'הוגדר מצב תמונה' : 'WebGL אינו זמין' });
+  if (mode === '3d' && hasWebGL()) return new Avatar3DProvider({ speaker });
+  return new PortraitAvatarProvider({ speaker, reason: mode === '3d' ? 'WebGL אינו זמין' : '' });
 }
+/** ?voice=native|neural|none (diagnostics/tests). */
+export const voiceParam = () => { const v = new URLSearchParams(location.search).get('voice'); return ['native', 'neural', 'none', 'auto'].includes(v) ? v : null; };
 
 // ------------------------------------------------------------------------------------------------
 export class Avatar3DProvider extends AvatarProvider {
@@ -68,10 +83,10 @@ export class Avatar3DProvider extends AvatarProvider {
     this.pixelRatio = Math.min(dpr, targetDpr);
     const host = this.el.querySelector('.avatar-3d-host');
     const head = new TalkingHead(host, {
-      lipsyncModules: [], cameraView: 'head', cameraDistance: 0.5, cameraY: -0.05,
+      lipsyncModules: [], cameraView: 'head', cameraDistance: CAM_DIST, cameraY: -0.05,
       cameraRotateEnable: false, cameraPanEnable: false, cameraZoomEnable: false,
       modelFPS: 30, modelPixelRatio: this.pixelRatio / dpr,
-      lightAmbientIntensity: 0.5, lightDirectIntensity: 6, lightDirectColor: 0xffe4cc, lightSpotIntensity: 0,
+      lightAmbientIntensity: 0.9, lightDirectIntensity: 4.2, lightDirectColor: 0xffe4cc, lightSpotIntensity: 0,
       avatarMood: 'neutral', avatarIdleEyeContact: 0.6, avatarIdleHeadMove: 0.45, avatarSpeakingEyeContact: 0.85, avatarSpeakingHeadMove: 0.5
     });
     this.head = head;
@@ -126,11 +141,11 @@ export class Avatar3DProvider extends AvatarProvider {
     h.armature.updateMatrixWorld(true);
     const p = (L && R) ? L.getWorldPosition(L.position.clone()).add(R.getWorldPosition(R.position.clone())).multiplyScalar(0.5)
                        : H.getWorldPosition(H.position.clone()).add({ x: 0, y: 0.08, z: 0 });
-    const t = Math.tan(h.camera.fov * Math.PI / 360), z = 0.5 + 2;          // cameraDistance + 'head' view offset
+    const t = Math.tan(h.camera.fov * Math.PI / 360), z = CAM_DIST + 2;          // cameraDistance + 'head' view offset
     const targetY = p.y - 0.03;                                            // eyes slightly above centre
     const cameraX = -p.x / (t * z);
     const cameraY = 1 - (targetY - 4 * h.avatarHeight / 5) / (t * z);
-    h.setView('head', { cameraX, cameraY, cameraDistance: 0.5 });
+    h.setView('head', { cameraX, cameraY, cameraDistance: CAM_DIST });
     this.framing = { eyeX: +p.x.toFixed(3), eyeY: +p.y.toFixed(3), cameraX, cameraY };
   }
   _fallback(err) {
@@ -160,7 +175,10 @@ export class Avatar3DProvider extends AvatarProvider {
   }
   _applyVisemes(target) {
     const now = performance.now(); const dt = Math.min(100, now - (this._lt || now)); this._lt = now;
-    const k = Math.min(1, dt / 45);                       // ~45 ms smoothing
+    const k = 1 - Math.exp(-dt / (this._closing ? 90 : 65)); // eased co-articulation (~65 ms attack, 90 ms release)
+    // nod spring + transient brow lifts (word-onset impulses from speak())
+    const N = this._nod || (this._nod = { p: 0, v: 0 }); stepSpring(N, dt);
+    if (this.state === 'speaking') { this._rt('headRotateX', 0.035 * N.p); if (this._browUntil) this._rt('browInnerUp', now < this._browUntil ? 0.32 : 0.08); }
     for (const v of VISEMES) {
       if (v === 'sil') continue;
       const tv = (target[v] || 0) * VISEME_GAIN; const c = this.cur[v] || 0; const n = c + (tv - c) * k;
@@ -175,14 +193,22 @@ export class Avatar3DProvider extends AvatarProvider {
     const keepAlert = this.state === 'alert';
     this.setState(keepAlert ? 'alert' : 'speaking');
     if (this.head) this.head.isSpeaking = true;
+    const words = String(text).split(/\s+/);
     await this.speaker.speak(text, {
       onFrame: w => { if (this.head) this._applyVisemes(w); },
+      onWord: i => {
+        const wd = words[i] || '';
+        if (i === 0 || /[.!?]$/.test(wd) || Math.random() < 0.28) { const N = this._nod || (this._nod = { p: 0, v: 0 }); N.v += 0.006 + Math.random() * 0.004; }
+        if (/\?$/.test(wd) || Math.random() < 0.07) this._browUntil = performance.now() + 420;
+      },
       onEnd: () => {}
     });
     if (tok !== this._tok) return;                         // superseded by a newer utterance
     // smooth close, then release visemes to TalkingHead
     const t0 = performance.now();
-    await new Promise(res => { const step = () => { this._applyVisemes({}); if (performance.now() - t0 < 160) requestAnimationFrame(step); else res(); }; step(); });
+    this._closing = true;
+    await new Promise(res => { const step = () => { this._applyVisemes({}); if (performance.now() - t0 < 260) requestAnimationFrame(step); else res(); }; step(); });
+    this._closing = false;
     if (tok !== this._tok) return;
     VISEMES.forEach(v => v !== 'sil' && this._rt('viseme_' + v, null));
     if (this.head) this.head.isSpeaking = false;
@@ -197,19 +223,32 @@ export class Avatar3DProvider extends AvatarProvider {
 }
 
 // ------------------------------------------------------------------------------------------------
-// 2.5D portrait fallback: the generated photo with a canvas jaw-drop / mouth-interior warp driven by visemes.
-const FACE = { cx: 260, lipY: 220, halfW: 33, chinY: 284 }; // in the 512×512 assets/doctor.jpg
+// 2.5D portrait (DEFAULT): the generated photo, animated on a canvas — soft eased jaw/mouth driven by visemes × audio
+// energy, natural blinks (lid warp), brow lifts, nods on word onsets, breathing and micro head sway. Cheap on phones.
+// Geometry measured on the 512×512 assets/doctor.jpg (the head is slightly tilted; eyes carry their own angle).
+const FACE = { cx: 260, lipY: 220, halfW: 33, chinY: 284 };
+const EYES = [
+  { cx: 215, cy: 155, w: 30, top: -6, bot: 5, a: -0.18, brow: { x: 214, y: 137, rx: 22, ry: 8 } },
+  { cx: 285, cy: 142, w: 33, top: -6, bot: 5, a: -0.19, brow: { x: 286, y: 125, rx: 24, ry: 8 } }
+];
+const VIEW = { zoom: 1.16, cx: 256, cy: 205 };          // frame the face closer than the raw photo
+const ease = (cur, target, dt, tau) => cur + (target - cur) * (1 - Math.exp(-dt / tau));
+
 export class PortraitAvatarProvider extends AvatarProvider {
   constructor({ speaker, reason = '' }) {
-    super(); this.speaker = speaker; this.kind = 'portrait'; this.reason = reason; this.state = 'idle'; this.open = 0; this.round = 0;
+    super(); this.speaker = speaker; this.kind = 'portrait'; this.reason = reason; this.state = 'idle';
+    this.open = 0; this.round = 0; this.targetOpen = 0; this.targetRound = 0; this.energy = 0;
+    this.anim = { blinks: 0, nods: 0, browLifts: 0, frames: 0 };
+    this.blink = { v: 0, next: performance.now() + 1800, phase: 0, t0: 0, double: false };
+    this.nod = { p: 0, v: 0 }; this.brow = { v: 0, target: 0, until: 0 };
+    this.reduced = matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     window.__avatar = this;
   }
-  set ttsEnabled(v) { this.speaker.ttsEnabled = v; }
+  set ttsEnabled(v) { this.speaker.ttsEnabled = v; this.speaker._decide?.(); }
   mount(el) {
     this.el = el;
     el.innerHTML = `
       <div class="avatar avatar-portrait" data-state="idle" data-kind="portrait">
-        <div class="avatar-ring"></div>
         <canvas class="avatar-img" width="512" height="512" role="img" aria-label="אווטאר של נועה, עוזרת טריאז' דיגיטלית (תמונה ממוחשבת)"></canvas>
         <span class="avatar-state" aria-live="polite"></span>
       </div>`;
@@ -217,23 +256,120 @@ export class PortraitAvatarProvider extends AvatarProvider {
     this.canvas = el.querySelector('canvas'); this.g = this.canvas.getContext('2d');
     this.off = document.createElement('canvas'); this.off.width = this.off.height = 512; this.og = this.off.getContext('2d');
     this.img = new Image(); this.img.src = 'assets/doctor.jpg';
-    this.ready = this.img.decode().then(() => { this.loaded = true; this.draw(0, 0); }).catch(() => {});
+    this.ready = this.img.decode().then(() => { this._prepEyes(); this.loaded = true; this._start(); }).catch(() => {});
     return this.ready;
   }
-  draw(open, round) {
+  /** Axis-aligned patches of each eye region (rotated by the eye's tilt) so lids can be stretched along the eye axis. */
+  _prepEyes() {
+    this.eyePatches = EYES.map(E => {
+      const W = E.w + 20, H = 40, c = document.createElement('canvas'); c.width = W; c.height = H;
+      const x = c.getContext('2d'); x.translate(W / 2, H / 2); x.rotate(-E.a); x.drawImage(this.img, -E.cx, -E.cy);
+      return { c, W, H };
+    });
+  }
+  _start() {
+    let last = performance.now();
+    const loop = now => {
+      if (!this.canvas?.isConnected) { this._raf = 0; return; }
+      const dt = Math.min(80, now - last); last = now;
+      if (!document.hidden) this._update(now, dt), this.draw();
+      this._raf = requestAnimationFrame(loop);
+    };
+    this._raf = requestAnimationFrame(loop);
+  }
+  _update(now, dt) {
+    this.anim.frames++;
+    // mouth: critically-damped easing (no snapping); slightly faster opening than closing
+    const tauO = this.targetOpen > this.open ? 55 : 85;
+    this.open = ease(this.open, this.targetOpen, dt, tauO); this.round = ease(this.round, this.targetRound, dt, 90);
+    // blinks: 2.5–6 s apart, ~15% double blinks, ~150 ms close-open
+    const B = this.blink;
+    if (!B.phase && now >= B.next) { B.phase = 1; B.t0 = now; this.anim.blinks++; }
+    if (B.phase) {
+      const k = (now - B.t0) / 150;
+      B.v = k < 0.45 ? k / 0.45 : k < 1 ? 1 - (k - 0.45) / 0.55 : 0;
+      if (k >= 1) {
+        B.phase = 0; B.v = 0;
+        if (!B.double && Math.random() < 0.15) { B.double = true; B.next = now + 120; }
+        else { B.double = false; B.next = now + 2500 + Math.random() * 3500 * (this.state === 'listening' ? 1.3 : 1); }
+      }
+    }
+    // nod spring (impulses come from word onsets)
+    stepSpring(this.nod, dt);
+    // brows: target from state + transient lifts
+    const base = this.state === 'listening' ? 0.55 : this.state === 'alert' ? 0.7 : 0;
+    const tgt = now < this.brow.until ? Math.max(base, this.brow.target) : base;
+    this.brow.v = ease(this.brow.v, tgt, dt, 140);
+  }
+  _onWord(i, text) {
+    if (this.reduced) return;
+    // nod on roughly every 3rd word and on sentence-final words; occasional brow lift for emphasis/questions
+    const w = (text || '').trim();
+    if (i === 0 || /[.!?]$/.test(w) || Math.random() < 0.28) { this.nod.v += 0.006 + Math.random() * 0.004; this.anim.nods++; }
+    if (/\?$/.test(w) || (i === 0 && Math.random() < 0.5) || Math.random() < 0.07) { this.brow.target = 0.6 + Math.random() * 0.3; this.brow.until = performance.now() + 380 + Math.random() * 300; this.anim.browLifts++; }
+  }
+  draw() {
     const { g, og, img } = this; if (!this.loaded) return;
-    const { cx, lipY, halfW, chinY } = FACE;
-    g.clearRect(0, 0, 512, 512); g.drawImage(img, 0, 0, 512, 512);
-    if (open < 0.02) return;
-    const d = open * 10;                                     // jaw drop in px
-    const rx = halfW * (0.92 - 0.38 * round), ry = 1.2 + open * 7;
-    // mouth interior + hint of upper teeth
-    g.fillStyle = '#3b1519'; g.beginPath(); g.ellipse(cx, lipY + d * 0.4, rx, ry, 0, 0, Math.PI * 2); g.fill();
-    if (open > 0.35) { g.fillStyle = 'rgba(236,228,222,.85)'; g.beginPath(); g.ellipse(cx, lipY + d * 0.4 - ry * 0.55, rx * 0.72, ry * 0.32, 0, 0, Math.PI * 2); g.fill(); }
-    // lower face (lower lip → chin) shifted down, feathered so it blends into the original
-    og.clearRect(0, 0, 512, 512);
+    const now = performance.now() / 1000;
+    const r = this.reduced ? 0 : 1;
+    const breath = Math.sin(now * 2 * Math.PI / 4.4);
+    const sway = r * (0.006 * Math.sin(now * 0.71) + 0.004 * Math.sin(now * 1.37 + 1));
+    const tilt = this.state === 'listening' ? 0.022 : 0;
+    const nod = this.nod.p;                                   // ~0..1
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, 512, 512);
+    // view transform (closer framing) × head motion around the neck pivot
+    const Z = VIEW.zoom * (1 + r * 0.004 * breath);
+    g.translate(256, 256); g.scale(Z, Z); g.translate(-VIEW.cx, -VIEW.cy);
+    g.translate(260, 400); g.rotate(sway + tilt + r * nod * 0.012); g.translate(-260, -400);
+    g.translate(r * 0.8 * Math.sin(now * 0.53), r * (0.9 * breath + nod * 2.4));
+    g.drawImage(img, 0, 0, 512, 512);
+    this._drawBrows(this.brow.v);
+    this._drawMouth(this.open, this.round);
+    this._drawLids(this.blink.v);
+  }
+  _drawBrows(v) {
+    if (v < 0.02) return;
+    const { og, img, g } = this; const lift = v * 2.2;
+    for (const E of EYES) {
+      const b = E.brow;
+      og.setTransform(1, 0, 0, 1, 0, 0); og.clearRect(0, 0, 512, 512);
+      og.drawImage(img, b.x - b.rx - 4, b.y - b.ry - 6, b.rx * 2 + 8, b.ry * 2 + 10, b.x - b.rx - 4, b.y - b.ry - 6 - lift, b.rx * 2 + 8, b.ry * 2 + 10 + lift * 0.6);
+      og.globalCompositeOperation = 'destination-in';
+      og.translate(b.x, b.y); og.scale(1, b.ry / b.rx);
+      const gr = og.createRadialGradient(0, 0, b.rx * 0.45, 0, 0, b.rx + 6);
+      gr.addColorStop(0, '#000'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      og.fillStyle = gr; og.fillRect(-b.rx - 8, -b.rx - 8, b.rx * 2 + 16, b.rx * 2 + 16);
+      og.setTransform(1, 0, 0, 1, 0, 0); og.globalCompositeOperation = 'source-over';
+      g.drawImage(this.off, 0, 0);
+    }
+  }
+  _drawLids(v) {
+    if (v < 0.03 || !this.eyePatches) return;
+    const { g } = this;
+    EYES.forEach((E, i) => {
+      const P = this.eyePatches[i]; const h = E.bot - E.top; const hs = 6;     // skin strip above the upper lid
+      g.save(); g.translate(E.cx, E.cy); g.rotate(E.a);
+      g.beginPath(); g.ellipse(0, (E.top + E.bot) / 2, E.w / 2 + 1.5, h / 2 + 2.5, 0, 0, Math.PI * 2); g.clip();
+      const sy = P.H / 2 + E.top - hs;
+      g.drawImage(P.c, 0, sy, P.W, hs + 1, -P.W / 2, E.top - hs, P.W, hs + 1 + v * (h + 1));
+      if (v > 0.45) {                                         // lash line along the lid edge
+        const y = E.top + v * (h + 1) - 0.5;
+        g.strokeStyle = `rgba(48,30,28,${(v - 0.45) * 1.1})`; g.lineWidth = 1.3;
+        g.beginPath(); g.moveTo(-E.w / 2 + 2, y - 0.8); g.quadraticCurveTo(0, y + 1.2, E.w / 2 - 2, y - 0.8); g.stroke();
+      }
+      g.restore();
+    });
+  }
+  _drawMouth(open, round) {
+    if (open < 0.015) return;
+    const { g, og, img } = this; const { cx, lipY, halfW, chinY } = FACE;
+    const d = open * 7;                                       // jaw drop (px) — conversational, not exaggerated
+    const rx = halfW * (0.86 - 0.3 * round), ry = 0.8 + open * 5.2;
+    g.fillStyle = '#4a1f22'; g.beginPath(); g.ellipse(cx, lipY + d * 0.42, rx, ry, 0, 0, Math.PI * 2); g.fill();
+    if (open > 0.3) { g.fillStyle = `rgba(232,224,218,${Math.min(0.8, (open - 0.3) * 2)})`; g.beginPath(); g.ellipse(cx, lipY + d * 0.42 - ry * 0.55, rx * 0.7, ry * 0.3, 0, 0, Math.PI * 2); g.fill(); }
+    og.setTransform(1, 0, 0, 1, 0, 0); og.clearRect(0, 0, 512, 512);
     const top = lipY + 1, h = chinY + 26 - top;
-    og.drawImage(img, cx - 80, top, 160, h, cx - 80 + (round * 0.5), top + d, 160 - round, h);
+    og.drawImage(img, cx - 80, top, 160, h, cx - 80 + round * 0.5, top + d, 160 - round, h);
     og.globalCompositeOperation = 'destination-in';
     const gr = og.createRadialGradient(cx, lipY + 26, 20, cx, lipY + 26, 78);
     gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.7, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
@@ -245,17 +381,20 @@ export class PortraitAvatarProvider extends AvatarProvider {
     const tok = this._tok = (this._tok || 0) + 1;
     const keepAlert = this.state === 'alert';
     this.setState(keepAlert ? 'alert' : 'speaking');
+    const words = String(text).split(/\s+/);
     await this.speaker.speak(text, {
-      onFrame: w => {
-        const k = 0.45; this.open += (opennessOf(w) - this.open) * k; this.round += (roundnessOf(w) - this.round) * k;
-        this.lastWeights = w; this.draw(this.open, this.round);
-      }
+      onFrame: (w, info) => {
+        this.lastWeights = w; this.energy = info?.energy ?? 0;
+        this.targetOpen = Math.min(1, opennessOf(w) * 0.85); this.targetRound = roundnessOf(w);
+      },
+      onWord: i => this._onWord(i, words[i])
     });
     if (tok !== this._tok) return;
-    this.open = this.round = 0; this.draw(0, 0);
+    this.targetOpen = this.targetRound = 0;
     if (!keepAlert && this.state !== 'alert') this.setState('idle');
   }
-  stop() { this.speaker.cancel(); this.draw(0, 0); if (this.state !== 'alert') this.setState('idle'); }
+  stop() { this.speaker.cancel(); this.targetOpen = 0; if (this.state !== 'alert') this.setState('idle'); }
+  destroy() { cancelAnimationFrame(this._raf); this._raf = 0; }
 }
 
 // ------------------------------------------------------------------------------------------------

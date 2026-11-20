@@ -1,0 +1,15 @@
+# Vendored on-device Hebrew TTS: licences
+
+Everything here is served from this site. Nothing is fetched from third parties at runtime.
+
+| Component | File(s) | Licence | Source |
+|---|---|---|---|
+| ONNX Runtime Web 1.31.1 (WASM build) | `ort/` | MIT, © Microsoft Corporation | npm `onnxruntime-web` |
+| renikud Hebrew G2P (text → stressed IPA) | `models/renikud.onnx`, `models/renikud-meta.json` (metadata extracted from the model) | CC BY 4.0, © Maxim Melichov, Yakov Kolani, Morris Alper | huggingface.co/renikud/renikud |
+| Piper Hebrew voice "noa" (medium, VITS, 22.05 kHz) | `models/he_IL-noa-medium.onnx(.json)` | CC BY 4.0, © thewh1teagle | huggingface.co/thewh1teagle/piper-he-noa |
+
+CC BY 4.0 requires attribution, which this file and the app's About section provide. Commercial use is permitted.
+The noa voice was trained on synthetic speech generated with Chatterbox (MIT) from Knesset sentences.
+Before any production use, review the upstream terms again.
+
+We did NOT use facebook/mms-tts-heb, which is licensed CC BY-NC 4.0 (non-commercial only).
