@@ -137,3 +137,25 @@ svg text { font-family: inherit; }
 .toast { background: #111827; color: #fff; padding: 10px 14px; border-radius: 10px; box-shadow: var(--shadow); max-width: 320px; } .toast-error { background: var(--red); } .toast-ok { background: var(--green); }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---- Avatar v2: 3D (TalkingHead) + 2.5D portrait fallback ---- */
+.avatar-3d { width: min(100%, 300px); height: auto; aspect-ratio: 1 / 1; border-radius: 22px; overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 25%, #f4fbfa 0%, #dcefed 55%, #c7e3e0 100%); box-shadow: var(--shadow); border: 3px solid #fff; }
+.avatar-3d .avatar-poster, .avatar-3d .avatar-3d-host { position: absolute; inset: 0; width: 100%; height: 100%; }
+.avatar-3d .avatar-poster { object-fit: cover; transition: opacity .5s; z-index: 1; }
+.avatar-3d .avatar-3d-host { z-index: 2; }
+.avatar-3d .avatar-3d-host canvas { width: 100% !important; height: 100% !important; display: block; }
+.avatar-3d.is-loaded .avatar-poster { opacity: 0; }
+.avatar-3d .avatar-loading { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); z-index: 3; font-size: 12px; background: rgba(255,255,255,.9); border-radius: 999px; padding: 2px 10px; color: var(--muted); }
+.avatar-3d.is-loaded .avatar-loading { display: none; }
+.avatar-3d .avatar-state { top: 8px; z-index: 4; }
+.avatar-3d::after { content: ''; position: absolute; inset: 0; border-radius: 20px; z-index: 5; pointer-events: none; box-shadow: inset 0 0 0 0 transparent; transition: box-shadow .3s; }
+.avatar-3d[data-state=speaking]::after { box-shadow: inset 0 0 0 3px var(--teal-2); }
+.avatar-3d[data-state=listening]::after { box-shadow: inset 0 0 0 3px var(--blue); }
+.avatar-3d[data-state=alert]::after { box-shadow: inset 0 0 0 4px var(--red); animation: ring .8s infinite; }
+.avatar-portrait canvas.avatar-img { display: block; }
+.avatar-portrait[data-state=speaking] .avatar-img { animation: breathe 3.5s ease-in-out infinite; }
+.avatar-portrait { animation: breathe 4.5s ease-in-out infinite; }
+@keyframes breathe { 0%,100% { transform: scale(1) } 50% { transform: scale(1.012) translateY(-1px) } }
+@media (max-width: 767px) { .avatar-3d { width: min(100%, 230px); } }
+@media (prefers-reduced-motion: reduce) { .avatar-portrait, .avatar-portrait .avatar-img { animation: none !important; } }

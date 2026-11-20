@@ -1,0 +1,8 @@
+doctor-avatar.glb
+Source: "mpfb.glb" from the TalkingHead repository (https://github.com/met4citizen/TalkingHead/tree/main/avatars),
+created with Blender + MPFB (MakeHuman) by Mika Suominen. License: CC0 1.0 (public domain dedication)
+— see TalkingHead README "Example avatar mpfb.glb ... licensed under CC0".
+Includes ARKit (52) blendshapes + Oculus visemes (15).
+Modifications for this prototype (also CC0): clothing re-coloured to a plain white clinical top (sports-suit texture removed),
+hair tinted darker, textures resized to 1024px WebP, geometry meshopt-compressed (36.8 MB → 4.4 MB).
+- Lower body below ~1.0 m removed from the body and clothing meshes (never visible in the head-and-shoulders camera; reduces per-frame skinning/morph work on phones).

@@ -1,7 +1,7 @@
 // App shell: router, patient flow (onboarding → consent → AI session → summary), staff routes.
 import { $, $$, esc, uid, toast, fmtDur, getSettings, loadRules } from './util.js';
 import { EncryptedIndexedDBStorage } from './storage.js';
-import { PlaceholderAvatar } from './avatar.js';
+import { createAvatar } from './avatar.js';
 import { RuleBasedDialogue } from './dialogue.js';
 import { MediaSession } from './media.js';
 import { SpeechInput } from './speech.js';
@@ -17,7 +17,7 @@ export const ctx = {
   settings: getSettings(),
   storage: new EncryptedIndexedDBStorage(),     // StorageProvider
   knowledge: new NullKnowledgeProvider(),       // KnowledgeProvider
-  makeAvatar: s => new PlaceholderAvatar({ imageUrl: 'assets/doctor.jpg', ttsEnabled: s.tts }), // AvatarProvider
+  makeAvatar: s => createAvatar(s),             // AvatarProvider (3D TalkingHead → 2.5D portrait fallback)
   makeDialogue: (rules, patient) => new RuleBasedDialogue(rules, patient),                         // DialogueProvider
   rules: null
 };
@@ -213,7 +213,8 @@ function syncFromDialogue() {
 function showTurn(turn) {
   addMsg('ai', turn.say);
   $('#caption').textContent = turn.say;
-  S.avatar.speak(turn.say);
+  const tok = S.turnTok = (S.turnTok || 0) + 1;
+  S.avatar.speak(turn.say).then(() => { if (S && S.turnTok === tok && !turn.done && S.avatar.state !== 'alert') S.avatar.setState('listening'); });
   if (turn.done) { $('#answer').innerHTML = '<p class="muted">מכינה סיכום…</p>'; return finish('completed'); }
   renderAnswer(turn.question);
 }
@@ -257,7 +258,7 @@ function renderAnswer(q) {
     const btn = e.currentTarget; S.speech = new SpeechInput(); btn.setAttribute('aria-pressed', 'true'); S.avatar.setState('listening');
     try { const t = await S.speech.listen({ onInterim: x => { $('#typed').value = x; } }); if (t) $('#typed').value = t; }
     catch (err) { toast('זיהוי דיבור נכשל: ' + err.message, 'error'); }
-    btn.setAttribute('aria-pressed', 'false'); S.avatar.setState('idle');
+    btn.setAttribute('aria-pressed', 'false'); S.avatar.setState('listening');
   });
   (A.querySelector('#typed') || A.querySelector('button'))?.focus({ preventScroll: true });
 }
@@ -304,7 +305,7 @@ async function triggerAlert(alerts, resumeTurn) {
   $('#em-override').onclick = async () => {
     if (!(await confirmDialog('האם את/ה בטוח/ה שזה לא מצב חירום? אם יש ספק — חייג/י 101.', 'כן, להמשיך בשיחה'))) return;
     c.alerts.forEach(a => { if (alerts.some(x => x.id === a.id)) a.overridden = true; });
-    log('alert-override'); ov.remove(); S.avatar.setState('idle');
+    log('alert-override'); ov.remove(); S.avatar.setState('listening');
     await ctx.storage.saveCase(c);
     showTurn(resumeTurn);
   };
@@ -407,7 +408,7 @@ async function finish(status, nav = true) {
   c.routing = route(c, ctx.settings);
   await ctx.storage.saveCase(c);
   Notifier.notifyCase(c.id);
-  S.avatar.stop(); S = null; draft = null;
+  S.avatar.stop(); S.avatar.destroy?.(); S = null; draft = null;
   if (nav) location.hash = `#/done/${c.id}`;
 }
 async function endSessionSilently() {
